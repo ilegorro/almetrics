@@ -23,8 +23,25 @@ func (m *MemStorage) AddCounter(name string, value Counter) {
 	m.counter[name] += value
 }
 
-func (m MemStorage) String() string {
-	return fmt.Sprintf("gauges: %v\ncounters : %v\n", m.gauge, m.counter)
+func (m MemStorage) GetGauge(name string) (Gauge, bool) {
+	v, ok := m.gauge[name]
+	return v, ok
+}
+
+func (m MemStorage) GetCounter(name string) (Counter, bool) {
+	v, ok := m.counter[name]
+	return v, ok
+}
+
+func (m MemStorage) GetMetrics() map[string]string {
+	res := make(map[string]string)
+	for k, v := range m.gauge {
+		res[k] = fmt.Sprintf("%v", v)
+	}
+	for k, v := range m.counter {
+		res[k] = fmt.Sprintf("%v", v)
+	}
+	return res
 }
 
 func NewMemStorage() MemStorage {

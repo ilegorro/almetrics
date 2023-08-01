@@ -1,61 +1,88 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/ilegorro/almetrics/internal/storage"
 	"github.com/stretchr/testify/assert"
 )
 
 func Test_updateHandlerContext_UpdateHandler(t *testing.T) {
 
+	type reqParams struct {
+		mType  string
+		mName  string
+		mValue string
+	}
 	tests := []struct {
-		name    string
-		request string
-		want    int
+		name   string
+		params reqParams
+		want   int
 	}{
 		{
-			name:    "correct gauge",
-			request: "/update/gauge/metric/100",
-			want:    http.StatusOK,
+			name: "correct gauge",
+			params: reqParams{
+				mType:  "gauge",
+				mName:  "metric",
+				mValue: "100",
+			},
+			want: http.StatusOK,
 		},
 		{
-			name:    "correct counter",
-			request: "/update/counter/metric/100",
-			want:    http.StatusOK,
+			name: "correct counter",
+			params: reqParams{
+				mType:  "counter",
+				mName:  "metric",
+				mValue: "100",
+			},
+			want: http.StatusOK,
 		},
 		{
-			name:    "incorrect path",
-			request: "/update/100",
-			want:    http.StatusNotFound,
+			name: "incorrect gauge value",
+			params: reqParams{
+				mType:  "gauge",
+				mName:  "metric",
+				mValue: "wrong",
+			},
+			want: http.StatusBadRequest,
 		},
 		{
-			name:    "incorrect gauge value",
-			request: "/update/gauge/metric/wrong",
-			want:    http.StatusBadRequest,
+			name: "incorrect counter value",
+			params: reqParams{
+				mType:  "counter",
+				mName:  "metric",
+				mValue: "wrong",
+			},
+			want: http.StatusBadRequest,
 		},
 		{
-			name:    "incorrect counter value",
-			request: "/update/counter/metric/wrong",
-			want:    http.StatusBadRequest,
-		},
-		{
-			name:    "incorrect type",
-			request: "/update/foo/metric/wrong",
-			want:    http.StatusBadRequest,
+			name: "incorrect type",
+			params: reqParams{
+				mType:  "foo",
+				mName:  "metric",
+				mValue: "100",
+			},
+			want: http.StatusBadRequest,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, tt.request, nil)
-			strg := storage.NewMemStorage()
-			hctx := NewUpdateHandlerContext(&strg)
-
+			r := httptest.NewRequest(http.MethodPost, "/update", nil)
 			w := httptest.NewRecorder()
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("mType", tt.params.mType)
+			rctx.URLParams.Add("mName", tt.params.mName)
+			rctx.URLParams.Add("mValue", tt.params.mValue)
+			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+
+			strg := storage.NewMemStorage()
+			hctx := NewHandlerContext(&strg)
 			h := http.HandlerFunc(hctx.UpdateHandler)
-			h(w, request)
+			h(w, r)
 
 			result := w.Result()
 

@@ -1,9 +1,9 @@
 package storage
 
-import "fmt"
-
 type Repository interface {
-	fmt.Stringer
 	AddGauge(string, Gauge)
 	AddCounter(string, Counter)
+	GetGauge(string) (Gauge, bool)
+	GetCounter(string) (Counter, bool)
+	GetMetrics() map[string]string
 }
