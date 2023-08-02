@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ilegorro/almetrics/internal/handlers"
+	"github.com/ilegorro/almetrics/internal/server"
 	"github.com/ilegorro/almetrics/internal/storage"
 )
 
@@ -17,10 +18,11 @@ func metricsRouter(ctx handlers.HandlerContext) chi.Router {
 }
 
 func main() {
+	op := server.ParseFlags()
 	strg := storage.NewMemStorage()
 	hctx := handlers.NewHandlerContext(&strg)
 
-	err := http.ListenAndServe(`:8080`, metricsRouter(*hctx))
+	err := http.ListenAndServe(op.GetEndpointURL(), metricsRouter(*hctx))
 	if err != nil {
 		panic(err)
 	}

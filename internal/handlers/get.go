@@ -50,5 +50,4 @@ func (ctx *HandlerContext) GetValueHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	w.Write([]byte(value))
-	w.WriteHeader(http.StatusOK)
 }

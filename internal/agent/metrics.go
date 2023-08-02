@@ -31,8 +31,9 @@ func (m *Metrics) Report(url string) {
 		resp, err := http.Post(requestURL, "text/plain", nil)
 		if err != nil {
 			fmt.Println(err)
+		} else {
+			resp.Body.Close()
 		}
-		resp.Body.Close()
 	}
 	for k, v := range m.counter {
 		dataURL := fmt.Sprintf("/counter/%v/%v", k, v)
@@ -40,8 +41,9 @@ func (m *Metrics) Report(url string) {
 		resp, err := http.Post(requestURL, "text/plain", nil)
 		if err != nil {
 			fmt.Println(err)
+		} else {
+			resp.Body.Close()
 		}
-		resp.Body.Close()
 	}
 	m.mutex.Unlock()
 }

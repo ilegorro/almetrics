@@ -7,33 +7,28 @@ import (
 	"github.com/ilegorro/almetrics/internal/agent"
 )
 
-const (
-	pollInterval   time.Duration = 2 * time.Second
-	reportInterval time.Duration = 10 * time.Second
-	reportURL      string        = "http://localhost:8080/update"
-)
-
 func main() {
 	var wg sync.WaitGroup
 	wg.Add(2)
+	op := agent.ParseFlags()
 
 	m := agent.NewMetrics()
-	go poll(m)
-	go report(m)
+	go poll(m, op)
+	go report(m, op)
 
 	wg.Wait()
 }
 
-func poll(m *agent.Metrics) {
+func poll(m *agent.Metrics, op *agent.Options) {
 	for {
 		m.Poll()
-		time.Sleep(pollInterval)
+		time.Sleep(time.Duration(op.PollInterval) * time.Second)
 	}
 }
 
-func report(m *agent.Metrics) {
+func report(m *agent.Metrics, op *agent.Options) {
 	for {
-		m.Report(reportURL)
-		time.Sleep(reportInterval)
+		m.Report(op.GetReportURL())
+		time.Sleep(time.Duration(op.ReportInterval) * time.Second)
 	}
 }
