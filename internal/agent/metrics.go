@@ -7,30 +7,31 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/ilegorro/almetrics/internal/storage"
+	"github.com/ilegorro/almetrics/internal/common"
 )
 
 type Metrics struct {
 	mutex   sync.Mutex
-	gauge   map[string]storage.Gauge
-	counter map[string]storage.Counter
+	gauge   map[string]common.Gauge
+	counter map[string]common.Counter
 }
 
 func NewMetrics() *Metrics {
 	return &Metrics{
-		gauge:   make(map[string]storage.Gauge),
-		counter: make(map[string]storage.Counter),
+		gauge:   make(map[string]common.Gauge),
+		counter: make(map[string]common.Counter),
 	}
 }
 
-func (m *Metrics) Report(url string) {
+func (m *Metrics) Report(url string) error {
 	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	for k, v := range m.gauge {
 		dataURL := fmt.Sprintf("/gauge/%v/%v", k, v)
 		requestURL := url + dataURL
 		resp, err := http.Post(requestURL, "text/plain", nil)
 		if err != nil {
-			fmt.Println(err)
+			return err
 		} else {
 			resp.Body.Close()
 		}
@@ -40,12 +41,12 @@ func (m *Metrics) Report(url string) {
 		requestURL := url + dataURL
 		resp, err := http.Post(requestURL, "text/plain", nil)
 		if err != nil {
-			fmt.Println(err)
+			return err
 		} else {
 			resp.Body.Close()
 		}
 	}
-	m.mutex.Unlock()
+	return nil
 }
 
 func (m *Metrics) Poll() {
@@ -53,34 +54,34 @@ func (m *Metrics) Poll() {
 	runtime.ReadMemStats(&memStats)
 
 	m.mutex.Lock()
-	m.gauge["Alloc"] = storage.Gauge(memStats.Alloc)
-	m.gauge["BuckHashSys"] = storage.Gauge(memStats.BuckHashSys)
-	m.gauge["Frees"] = storage.Gauge(memStats.Frees)
-	m.gauge["GCCPUFraction"] = storage.Gauge(memStats.GCCPUFraction)
-	m.gauge["GCSys"] = storage.Gauge(memStats.GCSys)
-	m.gauge["HeapAlloc"] = storage.Gauge(memStats.HeapAlloc)
-	m.gauge["HeapIdle"] = storage.Gauge(memStats.HeapIdle)
-	m.gauge["HeapInuse"] = storage.Gauge(memStats.HeapInuse)
-	m.gauge["HeapObjects"] = storage.Gauge(memStats.HeapObjects)
-	m.gauge["HeapReleased"] = storage.Gauge(memStats.HeapReleased)
-	m.gauge["HeapSys"] = storage.Gauge(memStats.HeapSys)
-	m.gauge["LastGC"] = storage.Gauge(memStats.LastGC)
-	m.gauge["Lookups"] = storage.Gauge(memStats.Lookups)
-	m.gauge["MCacheInuse"] = storage.Gauge(memStats.MCacheInuse)
-	m.gauge["MCacheSys"] = storage.Gauge(memStats.MCacheSys)
-	m.gauge["MSpanInuse"] = storage.Gauge(memStats.MSpanInuse)
-	m.gauge["MSpanSys"] = storage.Gauge(memStats.MSpanSys)
-	m.gauge["Mallocs"] = storage.Gauge(memStats.Mallocs)
-	m.gauge["NextGC"] = storage.Gauge(memStats.NextGC)
-	m.gauge["NumForcedGC"] = storage.Gauge(memStats.NumForcedGC)
-	m.gauge["NumGC"] = storage.Gauge(memStats.NumGC)
-	m.gauge["OtherSys"] = storage.Gauge(memStats.OtherSys)
-	m.gauge["PauseTotalNs"] = storage.Gauge(memStats.PauseTotalNs)
-	m.gauge["StackInuse"] = storage.Gauge(memStats.StackInuse)
-	m.gauge["StackSys"] = storage.Gauge(memStats.StackSys)
-	m.gauge["Sys"] = storage.Gauge(memStats.Sys)
-	m.gauge["TotalAlloc"] = storage.Gauge(memStats.TotalAlloc)
-	m.gauge["RandomValue"] = storage.Gauge(rand.Float64())
-	m.counter["PollCount"] += storage.Counter(1)
-	m.mutex.Unlock()
+	defer m.mutex.Unlock()
+	m.gauge["Alloc"] = common.Gauge(memStats.Alloc)
+	m.gauge["BuckHashSys"] = common.Gauge(memStats.BuckHashSys)
+	m.gauge["Frees"] = common.Gauge(memStats.Frees)
+	m.gauge["GCCPUFraction"] = common.Gauge(memStats.GCCPUFraction)
+	m.gauge["GCSys"] = common.Gauge(memStats.GCSys)
+	m.gauge["HeapAlloc"] = common.Gauge(memStats.HeapAlloc)
+	m.gauge["HeapIdle"] = common.Gauge(memStats.HeapIdle)
+	m.gauge["HeapInuse"] = common.Gauge(memStats.HeapInuse)
+	m.gauge["HeapObjects"] = common.Gauge(memStats.HeapObjects)
+	m.gauge["HeapReleased"] = common.Gauge(memStats.HeapReleased)
+	m.gauge["HeapSys"] = common.Gauge(memStats.HeapSys)
+	m.gauge["LastGC"] = common.Gauge(memStats.LastGC)
+	m.gauge["Lookups"] = common.Gauge(memStats.Lookups)
+	m.gauge["MCacheInuse"] = common.Gauge(memStats.MCacheInuse)
+	m.gauge["MCacheSys"] = common.Gauge(memStats.MCacheSys)
+	m.gauge["MSpanInuse"] = common.Gauge(memStats.MSpanInuse)
+	m.gauge["MSpanSys"] = common.Gauge(memStats.MSpanSys)
+	m.gauge["Mallocs"] = common.Gauge(memStats.Mallocs)
+	m.gauge["NextGC"] = common.Gauge(memStats.NextGC)
+	m.gauge["NumForcedGC"] = common.Gauge(memStats.NumForcedGC)
+	m.gauge["NumGC"] = common.Gauge(memStats.NumGC)
+	m.gauge["OtherSys"] = common.Gauge(memStats.OtherSys)
+	m.gauge["PauseTotalNs"] = common.Gauge(memStats.PauseTotalNs)
+	m.gauge["StackInuse"] = common.Gauge(memStats.StackInuse)
+	m.gauge["StackSys"] = common.Gauge(memStats.StackSys)
+	m.gauge["Sys"] = common.Gauge(memStats.Sys)
+	m.gauge["TotalAlloc"] = common.Gauge(memStats.TotalAlloc)
+	m.gauge["RandomValue"] = common.Gauge(rand.Float64())
+	m.counter["PollCount"] += common.Counter(1)
 }

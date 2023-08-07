@@ -1,9 +1,10 @@
 package server
 
 import (
-	"errors"
 	"flag"
 	"fmt"
+	"log"
+	"net/url"
 	"strings"
 
 	"github.com/caarlos0/env/v6"
@@ -22,22 +23,24 @@ func (op *Options) GetEndpointURL() string {
 	return fmt.Sprintf("%v:%v", op.ReportHost, op.ReportPort)
 }
 
-func getAddressParts(s string) (host string, port string, err error) {
-	parts := strings.Split(s, ":")
-	if len(parts) == 2 {
-		host = parts[0]
-		port = parts[1]
-	} else {
-		err = errors.New("wrong format - host:port")
+func getAddressParts(s string) (string, string, error) {
+	var host, port string
+	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
+		s = "https://" + s
 	}
-	return
+	u, err := url.Parse(s)
+	if err == nil {
+		host = u.Hostname()
+		port = u.Port()
+	}
+	return host, port, err
 }
 
 func ParseFlags() *Options {
 	var cfg Config
 	err := env.Parse(&cfg)
 	if err != nil {
-		panic(err)
+		log.Fatalln(err)
 	}
 
 	op := &Options{
@@ -56,7 +59,7 @@ func ParseFlags() *Options {
 	if cfg.Address != "" {
 		op.ReportHost, op.ReportPort, err = getAddressParts(cfg.Address)
 		if err != nil {
-			panic(err)
+			log.Fatalln(err)
 		}
 	}
 

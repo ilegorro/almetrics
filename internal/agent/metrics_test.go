@@ -11,10 +11,9 @@ import (
 func TestMetrics_Report(t *testing.T) {
 	tests := []struct {
 		name string
-		want int
 	}{
 		{
-			name: "server response ok",
+			name: "no error",
 		},
 	}
 	for _, tt := range tests {
@@ -22,9 +21,10 @@ func TestMetrics_Report(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
-			defer srv.Close()
 			m := NewMetrics()
-			m.Report(srv.URL)
+			err := m.Report(srv.URL)
+			assert.NoError(t, err)
+			srv.Close()
 		})
 	}
 }

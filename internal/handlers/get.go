@@ -2,44 +2,54 @@ package handlers
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ilegorro/almetrics/internal/storage"
+	"github.com/ilegorro/almetrics/internal/common"
 )
 
-func (ctx *HandlerContext) GetRootHandler(w http.ResponseWriter, r *http.Request) {
-	respHTML := `<html>
-		<head>
-			<title>Метрики</title>
-		</head>
-		<body>
-			<ul>`
-	for k, v := range ctx.strg.GetMetrics() {
-		respHTML += fmt.Sprintf("<li>%v: %v</li>\n", k, v)
-	}
-	respHTML += `</ul>
-		</body>
+func (hctx *HandlerContext) GetRootHandler(w http.ResponseWriter, r *http.Request) {
+	respHTML := `
+		<html>
+			<head>
+				<title>Метрики</title>
+			</head>
+			<body>
+				<ul>
+					{{range $k, $v := .}}
+						<li>{{$k}}: {{$v}}</li>
+					{{end}}
+				</ul>
+			</body>
 		</html> `
-	w.Write([]byte(respHTML))
+	tmpl, err := template.New("metrics").Parse(respHTML)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err = tmpl.Execute(w, hctx.strg.GetMetrics()); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Add("Content-Type", "text/html")
 	w.Header().Add("Content-Type", "charset=utf-8")
 }
 
-func (ctx *HandlerContext) GetValueHandler(w http.ResponseWriter, r *http.Request) {
+func (hctx *HandlerContext) GetValueHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 	var value string
 	switch mType {
-	case storage.MetricGauge:
-		v, ok := ctx.strg.GetGauge(mName)
+	case common.MetricGauge:
+		v, ok := hctx.strg.GetGauge(mName)
 		if !ok {
 			http.Error(w, "Not found", http.StatusNotFound)
 			return
 		}
 		value = fmt.Sprintf("%v", v)
-	case storage.MetricCounter:
-		v, ok := ctx.strg.GetCounter(mName)
+	case common.MetricCounter:
+		v, ok := hctx.strg.GetCounter(mName)
 		if !ok {
 			http.Error(w, "Not found", http.StatusNotFound)
 			return

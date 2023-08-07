@@ -1,40 +1,49 @@
 package storage
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
 
-const (
-	MetricGauge   string = "gauge"
-	MetricCounter string = "counter"
+	"github.com/ilegorro/almetrics/internal/common"
 )
 
-type Gauge float64
-type Counter int64
-
-type MemStorage struct {
-	gauge   map[string]Gauge
-	counter map[string]Counter
+type memStorage struct {
+	mutex   sync.Mutex
+	gauge   map[string]common.Gauge
+	counter map[string]common.Counter
 }
 
-func (m *MemStorage) AddGauge(name string, value Gauge) {
+func (m *memStorage) AddGauge(name string, value common.Gauge) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	m.gauge[name] = value
 }
 
-func (m *MemStorage) AddCounter(name string, value Counter) {
+func (m *memStorage) AddCounter(name string, value common.Counter) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	m.counter[name] += value
 }
 
-func (m MemStorage) GetGauge(name string) (Gauge, bool) {
+func (m *memStorage) GetGauge(name string) (common.Gauge, bool) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	v, ok := m.gauge[name]
 	return v, ok
 }
 
-func (m MemStorage) GetCounter(name string) (Counter, bool) {
+func (m *memStorage) GetCounter(name string) (common.Counter, bool) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	v, ok := m.counter[name]
 	return v, ok
 }
 
-func (m MemStorage) GetMetrics() map[string]string {
-	res := make(map[string]string)
+func (m *memStorage) GetMetrics() map[string]string {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	size := len(m.counter) + len(m.gauge)
+	res := make(map[string]string, size)
 	for k, v := range m.gauge {
 		res[k] = fmt.Sprintf("%v", v)
 	}
@@ -44,10 +53,10 @@ func (m MemStorage) GetMetrics() map[string]string {
 	return res
 }
 
-func NewMemStorage() MemStorage {
-	m := MemStorage{}
-	m.gauge = make(map[string]Gauge)
-	m.counter = make(map[string]Counter)
+func NewMemStorage() common.Repository {
+	m := &memStorage{}
+	m.gauge = make(map[string]common.Gauge)
+	m.counter = make(map[string]common.Counter)
 
 	return m
 }

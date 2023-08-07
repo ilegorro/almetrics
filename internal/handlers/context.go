@@ -1,14 +1,18 @@
 package handlers
 
-import "github.com/ilegorro/almetrics/internal/storage"
+import (
+	"log"
+
+	"github.com/ilegorro/almetrics/internal/common"
+)
 
 type HandlerContext struct {
-	strg storage.Repository
+	strg common.Repository
 }
 
-func NewHandlerContext(strg storage.Repository) *HandlerContext {
+func NewHandlerContext(strg common.Repository) *HandlerContext {
 	if strg == nil {
-		panic("Storage is not defined")
+		log.Fatalln("Storage is not defined")
 	}
 	return &HandlerContext{strg: strg}
 }

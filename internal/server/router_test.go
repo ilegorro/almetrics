@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"net/http"
@@ -17,21 +17,20 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path string) *http.R
 
 	resp, err := ts.Client().Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
 
 	return resp
 }
 
-func Test_metricsRouter(t *testing.T) {
+func TestMetricsRouter(t *testing.T) {
 	strg := storage.NewMemStorage()
-	hctx := handlers.NewHandlerContext(&strg)
-	ts := httptest.NewServer(metricsRouter(*hctx))
+	hctx := handlers.NewHandlerContext(strg)
+	ts := httptest.NewServer(MetricsRouter(hctx))
 	defer ts.Close()
 
 	var testTable = []struct {
 		url    string
 		method string
-		status int
+		want   int
 	}{
 		{"/update/gauge/foo/100", "POST", http.StatusOK},
 		{"/value/gauge/foo", "GET", http.StatusOK},
@@ -44,7 +43,7 @@ func Test_metricsRouter(t *testing.T) {
 	}
 	for _, v := range testTable {
 		resp := testRequest(t, ts, v.method, v.url)
-		defer resp.Body.Close()
-		assert.Equal(t, v.status, resp.StatusCode)
+		assert.Equal(t, v.want, resp.StatusCode)
+		resp.Body.Close()
 	}
 }

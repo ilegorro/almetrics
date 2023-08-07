@@ -1,29 +1,22 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ilegorro/almetrics/internal/handlers"
 	"github.com/ilegorro/almetrics/internal/server"
 	"github.com/ilegorro/almetrics/internal/storage"
 )
 
-func metricsRouter(ctx handlers.HandlerContext) chi.Router {
-	r := chi.NewRouter()
-	r.Post("/update/{mType}/{mName}/{mValue}", ctx.UpdateHandler)
-	r.Get("/value/{mType}/{mName}", ctx.GetValueHandler)
-	r.Get("/", ctx.GetRootHandler)
-	return r
-}
-
 func main() {
 	op := server.ParseFlags()
 	strg := storage.NewMemStorage()
-	hctx := handlers.NewHandlerContext(&strg)
+	hctx := handlers.NewHandlerContext(strg)
+	router := server.MetricsRouter(hctx)
+	endPoint := op.GetEndpointURL()
 
-	err := http.ListenAndServe(op.GetEndpointURL(), metricsRouter(*hctx))
-	if err != nil {
-		panic(err)
+	if err := http.ListenAndServe(endPoint, router); err != http.ErrServerClosed {
+		log.Fatalln(err)
 	}
 }

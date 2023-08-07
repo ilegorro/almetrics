@@ -80,7 +80,7 @@ func Test_updateHandlerContext_UpdateHandler(t *testing.T) {
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 
 			strg := storage.NewMemStorage()
-			hctx := NewHandlerContext(&strg)
+			hctx := NewHandlerContext(strg)
 			h := http.HandlerFunc(hctx.UpdateHandler)
 			h(w, r)
 

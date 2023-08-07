@@ -1,4 +1,12 @@
-package storage
+package common
+
+type Gauge float64
+type Counter int64
+
+const (
+	MetricGauge   string = "gauge"
+	MetricCounter string = "counter"
+)
 
 type Repository interface {
 	AddGauge(string, Gauge)

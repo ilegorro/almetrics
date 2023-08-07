@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -28,7 +29,10 @@ func poll(m *agent.Metrics, op *agent.Options) {
 
 func report(m *agent.Metrics, op *agent.Options) {
 	for {
-		m.Report(op.GetReportURL())
+		err := m.Report(op.GetReportURL())
+		if err != nil {
+			fmt.Println(err)
+		}
 		time.Sleep(time.Duration(op.ReportInterval) * time.Second)
 	}
 }
