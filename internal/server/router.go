@@ -7,8 +7,8 @@ import (
 
 func MetricsRouter(hctx *handlers.HandlerContext) chi.Router {
 	r := chi.NewRouter()
-	r.Post("/update/{mType}/{mName}/{mValue}", hctx.UpdateHandler)
-	r.Get("/value/{mType}/{mName}", hctx.GetValueHandler)
-	r.Get("/", hctx.GetRootHandler)
+	r.Post("/update/{mType}/{mName}/{mValue}", WithLogging(hctx.UpdateHandler))
+	r.Get("/value/{mType}/{mName}", WithLogging(hctx.GetValueHandler))
+	r.Get("/", WithLogging(hctx.GetRootHandler))
 	return r
 }

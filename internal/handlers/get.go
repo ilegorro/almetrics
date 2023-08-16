@@ -34,6 +34,7 @@ func (hctx *HandlerContext) GetRootHandler(w http.ResponseWriter, r *http.Reques
 	}
 	w.Header().Add("Content-Type", "text/html")
 	w.Header().Add("Content-Type", "charset=utf-8")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (hctx *HandlerContext) GetValueHandler(w http.ResponseWriter, r *http.Request) {
