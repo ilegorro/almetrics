@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_updateHandlerContext_UpdateHandler(t *testing.T) {
+func TestUpdateHandler(t *testing.T) {
 
 	type reqParams struct {
 		mType  string
@@ -88,6 +89,61 @@ func Test_updateHandlerContext_UpdateHandler(t *testing.T) {
 
 			assert.Equal(t, tt.want, result.StatusCode)
 
+			result.Body.Close()
+		})
+	}
+}
+
+func TestUpdateJSONHandler(t *testing.T) {
+
+	type reqParams struct {
+		mType  string
+		mName  string
+		mvalue string
+	}
+	tests := []struct {
+		name     string
+		bodyJSON string
+		want     int
+	}{
+		{
+			name:     "correct gauge",
+			bodyJSON: `{"id": "metric", "type": "gauge", "value": 100}`,
+			want:     http.StatusOK,
+		},
+		{
+			name:     "correct counter",
+			bodyJSON: `{"id": "metric", "type": "counter", "delta": 100}`,
+			want:     http.StatusOK,
+		},
+		{
+			name:     "incorrect gauge value",
+			bodyJSON: `{"id": "metric", "type": "gauge", "value": "wrong"}`,
+			want:     http.StatusBadRequest,
+		},
+		{
+			name:     "incorrect counter value",
+			bodyJSON: `{"id": "metric", "type": "counter", "delta": "wrong"}`,
+			want:     http.StatusBadRequest,
+		},
+		{
+			name:     "incorrect type",
+			bodyJSON: `{"id": "metric", "type": "foo", "value": 100}`,
+			want:     http.StatusBadRequest,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewBuffer([]byte(tt.bodyJSON)))
+			w := httptest.NewRecorder()
+
+			strg := storage.NewMemStorage()
+			hctx := NewHandlerContext(strg)
+			h := http.HandlerFunc(hctx.UpdateJSONHandler)
+			h(w, r)
+			result := w.Result()
+
+			assert.Equal(t, tt.want, result.StatusCode)
 			result.Body.Close()
 		})
 	}

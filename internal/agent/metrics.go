@@ -1,7 +1,8 @@
 package agent
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/json"
 	"math/rand"
 	"net/http"
 	"runtime"
@@ -26,24 +27,20 @@ func NewMetrics() *Metrics {
 func (m *Metrics) Report(url string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+
+	var data common.Metrics
 	for k, v := range m.gauge {
-		dataURL := fmt.Sprintf("/gauge/%v/%v", k, v)
-		requestURL := url + dataURL
-		resp, err := http.Post(requestURL, "text/plain", nil)
+		data = common.Metrics{ID: k, MType: common.MetricGauge, Value: (*float64)(&v)}
+		err := reportPostData(data, url)
 		if err != nil {
 			return err
-		} else {
-			resp.Body.Close()
 		}
 	}
 	for k, v := range m.counter {
-		dataURL := fmt.Sprintf("/counter/%v/%v", k, v)
-		requestURL := url + dataURL
-		resp, err := http.Post(requestURL, "text/plain", nil)
+		data = common.Metrics{ID: k, MType: common.MetricCounter, Delta: (*int64)(&v)}
+		err := reportPostData(data, url)
 		if err != nil {
 			return err
-		} else {
-			resp.Body.Close()
 		}
 	}
 	return nil
@@ -84,4 +81,18 @@ func (m *Metrics) Poll() {
 	m.gauge["TotalAlloc"] = common.Gauge(memStats.TotalAlloc)
 	m.gauge["RandomValue"] = common.Gauge(rand.Float64())
 	m.counter["PollCount"] += common.Counter(1)
+}
+
+func reportPostData(data common.Metrics, url string) error {
+	dataJSON, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(dataJSON))
+	if err != nil {
+		return err
+	} else {
+		resp.Body.Close()
+	}
+	return nil
 }
