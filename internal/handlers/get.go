@@ -30,13 +30,12 @@ func (hctx *HandlerContext) GetRootHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "text/html;charset=utf-8")
+	w.WriteHeader(http.StatusOK)
 	if err = tmpl.Execute(w, hctx.strg.GetMetrics()); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Add("Content-Type", "text/html")
-	w.Header().Add("Content-Type", "charset=utf-8")
-	w.WriteHeader(http.StatusOK)
 }
 
 func (hctx *HandlerContext) GetValueHandler(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +61,7 @@ func (hctx *HandlerContext) GetValueHandler(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Incorrect type", http.StatusBadRequest)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(value))
 }
 
@@ -115,5 +115,6 @@ func (hctx *HandlerContext) GetValueJSONHandler(w http.ResponseWriter, r *http.R
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(respJSON))
 }

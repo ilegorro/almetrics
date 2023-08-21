@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"math/rand"
 	"net/http"
@@ -88,7 +89,25 @@ func reportPostData(data common.Metrics, url string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(dataJSON))
+
+	buf := bytes.NewBuffer(nil)
+	zb := gzip.NewWriter(buf)
+	_, err = zb.Write([]byte(dataJSON))
+	if err != nil {
+		return err
+	}
+	if err = zb.Close(); err != nil {
+		return err
+	}
+
+	r, err := http.NewRequest(http.MethodPost, url, buf)
+	if err != nil {
+		return err
+	}
+	r.Header.Set("Accept-Encoding", "gzip")
+	r.Header.Set("Content-Encoding", "gzip")
+	r.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
 		return err
 	} else {
