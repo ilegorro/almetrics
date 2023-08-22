@@ -3,11 +3,13 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ilegorro/almetrics/internal/common"
+	"github.com/ilegorro/almetrics/internal/server"
 )
 
 func (hctx *HandlerContext) UpdateHandler(w http.ResponseWriter, r *http.Request) {
@@ -34,6 +36,13 @@ func (hctx *HandlerContext) UpdateHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+	if hctx.syncPath != "" {
+		err := server.SaveMetrics(hctx.strg, hctx.syncPath)
+		if err != nil {
+			log.Println(err)
+		}
+
+	}
 }
 
 func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Request) {
@@ -89,4 +98,10 @@ func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(respJSON))
+	if hctx.syncPath != "" {
+		err = server.SaveMetrics(hctx.strg, hctx.syncPath)
+		if err != nil {
+			log.Println(err)
+		}
+	}
 }

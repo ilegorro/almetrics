@@ -32,7 +32,15 @@ func (hctx *HandlerContext) GetRootHandler(w http.ResponseWriter, r *http.Reques
 	}
 	w.Header().Set("Content-Type", "text/html;charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	if err = tmpl.Execute(w, hctx.strg.GetMetrics()); err != nil {
+	data := make(map[string]string, 0)
+	for _, v := range hctx.strg.GetMetrics() {
+		if v.MType == common.MetricGauge {
+			data[v.ID] = fmt.Sprintf("%v", *v.Value)
+		} else if v.MType == common.MetricCounter {
+			data[v.ID] = fmt.Sprintf("%v", *v.Delta)
+		}
+	}
+	if err = tmpl.Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

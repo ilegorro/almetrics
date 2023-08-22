@@ -1,12 +1,11 @@
-package server
+package handlers
 
 import (
 	"github.com/go-chi/chi/v5"
-	"github.com/ilegorro/almetrics/internal/handlers"
 	"github.com/ilegorro/almetrics/internal/middleware"
 )
 
-func MetricsRouter(hctx *handlers.HandlerContext) chi.Router {
+func MetricsRouter(hctx *HandlerContext) chi.Router {
 	r := chi.NewRouter()
 	r.Post("/update/{mType}/{mName}/{mValue}", middleware.WithLogging(middleware.WithCompression(hctx.UpdateHandler)))
 	r.Post("/update/", middleware.WithLogging(middleware.WithCompression(hctx.UpdateJSONHandler)))

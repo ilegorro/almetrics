@@ -7,12 +7,13 @@ import (
 )
 
 type HandlerContext struct {
-	strg common.Repository
+	strg     common.Repository
+	syncPath string
 }
 
-func NewHandlerContext(strg common.Repository) *HandlerContext {
+func NewHandlerContext(strg common.Repository, syncPath string) *HandlerContext {
 	if strg == nil {
 		log.Fatalln("Storage is not defined")
 	}
-	return &HandlerContext{strg: strg}
+	return &HandlerContext{strg: strg, syncPath: syncPath}
 }

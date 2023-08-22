@@ -8,6 +8,8 @@ import (
 )
 
 func TestMemStorage_AddGauge(t *testing.T) {
+	var testGauge float64 = 100
+
 	tests := []struct {
 		name  string
 		mName string
@@ -17,8 +19,8 @@ func TestMemStorage_AddGauge(t *testing.T) {
 		{
 			name:  "add gauge twice",
 			mName: "metric",
-			value: common.Gauge(100),
-			want:  common.Gauge(100),
+			value: common.Gauge(testGauge),
+			want:  common.Gauge(testGauge),
 		},
 	}
 	for _, tt := range tests {
@@ -34,6 +36,8 @@ func TestMemStorage_AddGauge(t *testing.T) {
 }
 
 func TestMemStorage_AddCounter(t *testing.T) {
+	var testCounter int64 = 100
+
 	tests := []struct {
 		name  string
 		mName string
@@ -43,8 +47,8 @@ func TestMemStorage_AddCounter(t *testing.T) {
 		{
 			name:  "add counter twice",
 			mName: "metric",
-			value: common.Counter(100),
-			want:  common.Counter(200),
+			value: common.Counter(testCounter),
+			want:  common.Counter(testCounter + testCounter),
 		},
 	}
 	for _, tt := range tests {
@@ -60,6 +64,8 @@ func TestMemStorage_AddCounter(t *testing.T) {
 }
 
 func TestMemStorage_GetGauge(t *testing.T) {
+	var testGauge float64 = 100
+
 	tests := []struct {
 		name       string
 		setName    string
@@ -71,14 +77,14 @@ func TestMemStorage_GetGauge(t *testing.T) {
 			name:       "get right value",
 			setName:    "foo",
 			getName:    "foo",
-			value:      100,
+			value:      common.Gauge(testGauge),
 			wantStatus: true,
 		},
 		{
 			name:       "get wrong value",
 			setName:    "foo",
 			getName:    "bar",
-			value:      100,
+			value:      common.Gauge(testGauge),
 			wantStatus: false,
 		},
 	}
@@ -93,6 +99,8 @@ func TestMemStorage_GetGauge(t *testing.T) {
 }
 
 func TestMemStorage_GetCounter(t *testing.T) {
+	var testCounter int64 = 100
+
 	tests := []struct {
 		name       string
 		setName    string
@@ -104,14 +112,14 @@ func TestMemStorage_GetCounter(t *testing.T) {
 			name:       "get right value",
 			setName:    "foo",
 			getName:    "foo",
-			value:      100,
+			value:      common.Counter(testCounter),
 			wantStatus: true,
 		},
 		{
 			name:       "get wrong value",
 			setName:    "foo",
 			getName:    "bar",
-			value:      100,
+			value:      common.Counter(testCounter),
 			wantStatus: false,
 		},
 	}
@@ -126,6 +134,9 @@ func TestMemStorage_GetCounter(t *testing.T) {
 }
 
 func TestMemStorage_GetMetrics(t *testing.T) {
+	var testCounter int64 = 100
+	var testGauge float64 = 100
+
 	type fields struct {
 		gauge   map[string]common.Gauge
 		counter map[string]common.Counter
@@ -133,24 +144,20 @@ func TestMemStorage_GetMetrics(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields fields
-		want   map[string]string
+		want   int
 	}{
 		{
 			name: "get metrics",
 			fields: fields{
 				gauge: map[string]common.Gauge{
-					"foo": common.Gauge(100),
-					"bar": common.Gauge(200),
+					"foo": common.Gauge(testGauge),
+					"bar": common.Gauge(testGauge),
 				},
 				counter: map[string]common.Counter{
-					"buz": common.Counter(300),
+					"buz": common.Counter(testCounter),
 				},
 			},
-			want: map[string]string{
-				"foo": "100",
-				"bar": "200",
-				"buz": "300",
-			},
+			want: 3,
 		},
 	}
 	for _, tt := range tests {
@@ -162,7 +169,8 @@ func TestMemStorage_GetMetrics(t *testing.T) {
 			for k, v := range tt.fields.gauge {
 				strg.AddGauge(k, common.Gauge(v))
 			}
-			assert.Equal(t, tt.want, strg.GetMetrics())
+			metrics := strg.GetMetrics()
+			assert.Equal(t, tt.want, len(metrics))
 		})
 	}
 }

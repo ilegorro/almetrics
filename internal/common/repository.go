@@ -13,7 +13,9 @@ type Repository interface {
 	AddCounter(string, Counter)
 	GetGauge(string) (Gauge, bool)
 	GetCounter(string) (Counter, bool)
-	GetMetrics() map[string]string
+	GetMetrics() []Metrics
+	LockMutex()
+	UnlockMutex()
 }
 
 type Metrics struct {

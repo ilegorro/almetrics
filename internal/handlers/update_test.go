@@ -81,7 +81,7 @@ func TestUpdateHandler(t *testing.T) {
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 
 			strg := storage.NewMemStorage()
-			hctx := NewHandlerContext(strg)
+			hctx := NewHandlerContext(strg, "")
 			h := http.HandlerFunc(hctx.UpdateHandler)
 			h(w, r)
 
@@ -138,7 +138,7 @@ func TestUpdateJSONHandler(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			strg := storage.NewMemStorage()
-			hctx := NewHandlerContext(strg)
+			hctx := NewHandlerContext(strg, "")
 			h := http.HandlerFunc(hctx.UpdateJSONHandler)
 			h(w, r)
 			result := w.Result()

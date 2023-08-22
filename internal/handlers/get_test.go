@@ -62,7 +62,7 @@ func TestGetValueJSONHandler(t *testing.T) {
 	}
 
 	strg := storage.NewMemStorage()
-	hctx := NewHandlerContext(strg)
+	hctx := NewHandlerContext(strg, "")
 	updateHandler := http.HandlerFunc(middleware.WithCompression(hctx.UpdateJSONHandler))
 	valueHandler := http.HandlerFunc(middleware.WithCompression(hctx.GetValueJSONHandler))
 	mux := http.NewServeMux()
