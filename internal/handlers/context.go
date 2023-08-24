@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"log"
-
 	"github.com/ilegorro/almetrics/internal/common"
 )
 
@@ -12,8 +10,9 @@ type HandlerContext struct {
 }
 
 func NewHandlerContext(strg common.Repository, syncPath string) *HandlerContext {
+	logger := common.SugaredLogger()
 	if strg == nil {
-		log.Fatalln("Storage is not defined")
+		logger.Fatalln("Storage is not defined")
 	}
 	return &HandlerContext{strg: strg, syncPath: syncPath}
 }

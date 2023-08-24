@@ -3,12 +3,12 @@ package server
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net/url"
 	"os"
 	"strings"
 
 	"github.com/caarlos0/env/v6"
+	"github.com/ilegorro/almetrics/internal/common"
 )
 
 type Config struct {
@@ -27,10 +27,12 @@ type Options struct {
 }
 
 func ParseFlags() *Options {
+	logger := common.SugaredLogger()
+
 	var cfg Config
 	err := env.Parse(&cfg)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Errorf("Unable to parse env: %+v", err)
 	}
 
 	op := &Options{
@@ -63,7 +65,7 @@ func ParseFlags() *Options {
 	if cfg.Address != "" {
 		op.ReportHost, op.ReportPort, err = getAddressParts(cfg.Address)
 		if err != nil {
-			log.Fatalln(err)
+			logger.Fatalf("Error parsing hostname and port: %+v", err)
 		}
 	}
 

@@ -1,29 +1,14 @@
 package middleware
 
 import (
-	"log"
 	"net/http"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/ilegorro/almetrics/internal/common"
 )
 
-var logger *zap.Logger
-
-func GetLogger() *zap.Logger {
-	var err error
-	if logger == nil {
-		logger, err = zap.NewDevelopment()
-		if err != nil {
-			log.Fatalln(err)
-
-		}
-	}
-	return logger
-}
-
 func WithLogging(h http.HandlerFunc) http.HandlerFunc {
-	sugar := *GetLogger().Sugar()
+	logger := common.SugaredLogger()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		responseData := &responseData{
@@ -36,7 +21,7 @@ func WithLogging(h http.HandlerFunc) http.HandlerFunc {
 		}
 		h(&lw, r)
 		duration := time.Since(start)
-		sugar.Infoln(
+		logger.Infoln(
 			"uri", r.RequestURI,
 			"method", r.Method,
 			"status", responseData.status,

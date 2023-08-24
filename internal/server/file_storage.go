@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/ilegorro/almetrics/internal/common"
 )
@@ -35,4 +37,15 @@ func SaveMetrics(m common.Repository, path string) error {
 	}
 
 	return os.WriteFile(path, data, 0666)
+}
+
+func SaveMetricsInterval(m common.Repository, op *Options, wg *sync.WaitGroup) {
+	defer wg.Done()
+	if op.StoragePath == "" {
+		return
+	}
+	for {
+		time.Sleep(time.Duration(op.StorageInterval) * time.Second)
+		SaveMetrics(m, op.StoragePath)
+	}
 }

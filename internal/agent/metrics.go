@@ -85,7 +85,7 @@ func (m *Metrics) Poll() {
 }
 
 func reportPostData(data common.Metrics, url string) error {
-	dataJSON, err := json.MarshalIndent(data, "", "  ")
+	dataJSON, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
@@ -110,8 +110,7 @@ func reportPostData(data common.Metrics, url string) error {
 	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
 		return err
-	} else {
-		resp.Body.Close()
 	}
+	defer resp.Body.Close()
 	return nil
 }

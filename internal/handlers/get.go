@@ -79,6 +79,7 @@ func (hctx *HandlerContext) GetValueJSONHandler(w http.ResponseWriter, r *http.R
 	var buf bytes.Buffer
 
 	_, err := buf.ReadFrom(r.Body)
+	defer r.Body.Close()
 	if err != nil {
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
@@ -116,7 +117,7 @@ func (hctx *HandlerContext) GetValueJSONHandler(w http.ResponseWriter, r *http.R
 		http.Error(w, "Incorrect type", http.StatusBadRequest)
 		return
 	}
-	respJSON, err := json.MarshalIndent(respData, "", "  ")
+	respJSON, err := json.Marshal(respData)
 	if err != nil {
 		http.Error(w, "Error writing body", http.StatusInternalServerError)
 		return

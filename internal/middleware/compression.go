@@ -23,6 +23,7 @@ func WithCompression(h http.HandlerFunc) http.HandlerFunc {
 		sendsGzip := strings.Contains(contentEncoding, "gzip")
 		if sendsGzip {
 			cr, err := newCompressReader(r.Body)
+			defer r.Body.Close()
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
@@ -36,8 +37,9 @@ func WithCompression(h http.HandlerFunc) http.HandlerFunc {
 }
 
 type compressWriter struct {
-	w  http.ResponseWriter
-	zw *gzip.Writer
+	w          http.ResponseWriter
+	zw         *gzip.Writer
+	statusCode int
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
@@ -52,11 +54,17 @@ func (c *compressWriter) Header() http.Header {
 }
 
 func (c *compressWriter) Write(p []byte) (int, error) {
-	return c.zw.Write(p)
+	if c.statusCode < 300 {
+		return c.zw.Write(p)
+	}
+	return c.w.Write(p)
 }
 
 func (c *compressWriter) WriteHeader(statusCode int) {
-	c.w.Header().Set("Content-Encoding", "gzip")
+	c.statusCode = statusCode
+	if statusCode < 300 {
+		c.w.Header().Set("Content-Encoding", "gzip")
+	}
 	c.w.WriteHeader(statusCode)
 }
 

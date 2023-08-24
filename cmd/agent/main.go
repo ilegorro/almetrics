@@ -14,20 +14,22 @@ func main() {
 	op := agent.ParseFlags()
 
 	m := agent.NewMetrics()
-	go poll(m, op)
-	go report(m, op)
+	go poll(m, op, &wg)
+	go report(m, op, &wg)
 
 	wg.Wait()
 }
 
-func poll(m *agent.Metrics, op *agent.Options) {
+func poll(m *agent.Metrics, op *agent.Options, wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
 		m.Poll()
 		time.Sleep(time.Duration(op.PollInterval) * time.Second)
 	}
 }
 
-func report(m *agent.Metrics, op *agent.Options) {
+func report(m *agent.Metrics, op *agent.Options, wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
 		err := m.Report(op.GetReportURL())
 		if err != nil {

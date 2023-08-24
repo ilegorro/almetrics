@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -13,6 +12,7 @@ import (
 )
 
 func (hctx *HandlerContext) UpdateHandler(w http.ResponseWriter, r *http.Request) {
+	logger := common.SugaredLogger()
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 	mValue := chi.URLParam(r, "mValue")
@@ -39,17 +39,18 @@ func (hctx *HandlerContext) UpdateHandler(w http.ResponseWriter, r *http.Request
 	if hctx.syncPath != "" {
 		err := server.SaveMetrics(hctx.strg, hctx.syncPath)
 		if err != nil {
-			log.Println(err)
+			logger.Errorf("Unable to save metrics: %+v", err)
 		}
-
 	}
 }
 
 func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Request) {
 	var data common.Metrics
 	var buf bytes.Buffer
+	logger := common.SugaredLogger()
 
 	_, err := buf.ReadFrom(r.Body)
+	defer r.Body.Close()
 	if err != nil {
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
@@ -89,7 +90,7 @@ func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Req
 		http.Error(w, "Incorrect type", http.StatusBadRequest)
 		return
 	}
-	respJSON, err := json.MarshalIndent(respData, "", "  ")
+	respJSON, err := json.Marshal(respData)
 	if err != nil {
 		http.Error(w, "Error writing body", http.StatusInternalServerError)
 		return
@@ -101,7 +102,7 @@ func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Req
 	if hctx.syncPath != "" {
 		err = server.SaveMetrics(hctx.strg, hctx.syncPath)
 		if err != nil {
-			log.Println(err)
+			logger.Errorf("Unable to save metrics: %+v", err)
 		}
 	}
 }
