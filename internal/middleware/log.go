@@ -7,7 +7,7 @@ import (
 	"github.com/ilegorro/almetrics/internal/common"
 )
 
-func WithLogging(h http.HandlerFunc) http.HandlerFunc {
+func WithLogging(h http.Handler) http.Handler {
 	logger := common.SugaredLogger()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -19,7 +19,7 @@ func WithLogging(h http.HandlerFunc) http.HandlerFunc {
 			ResponseWriter: w,
 			responseData:   responseData,
 		}
-		h(&lw, r)
+		h.ServeHTTP(&lw, r)
 		duration := time.Since(start)
 		logger.Infoln(
 			"uri", r.RequestURI,

@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"net/http"
 
@@ -34,11 +33,7 @@ func (hctx *HandlerContext) GetRootHandler(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 	data := make(map[string]string, 0)
 	for _, v := range hctx.strg.GetMetrics() {
-		if v.MType == common.MetricGauge {
-			data[v.ID] = fmt.Sprintf("%v", *v.Value)
-		} else if v.MType == common.MetricCounter {
-			data[v.ID] = fmt.Sprintf("%v", *v.Delta)
-		}
+		data[v.ID] = v.StringValue()
 	}
 	if err = tmpl.Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -49,28 +44,22 @@ func (hctx *HandlerContext) GetRootHandler(w http.ResponseWriter, r *http.Reques
 func (hctx *HandlerContext) GetValueHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
-	var value string
-	switch mType {
-	case common.MetricGauge:
-		v, ok := hctx.strg.GetGauge(mName)
-		if !ok {
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
+
+	v, err := hctx.strg.GetMetric(mName, mType)
+	if err != nil {
+		switch err {
+		case common.ErrWrongMetricsName:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case common.ErrWrongMetricsType:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "error getting metric", http.StatusInternalServerError)
 		}
-		value = fmt.Sprintf("%v", v)
-	case common.MetricCounter:
-		v, ok := hctx.strg.GetCounter(mName)
-		if !ok {
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
-		}
-		value = fmt.Sprintf("%v", v)
-	default:
-		http.Error(w, "Incorrect type", http.StatusBadRequest)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(value))
+	w.Write([]byte(v.StringValue()))
 }
 
 func (hctx *HandlerContext) GetValueJSONHandler(w http.ResponseWriter, r *http.Request) {
@@ -89,35 +78,20 @@ func (hctx *HandlerContext) GetValueJSONHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var respData common.Metrics
-	switch data.MType {
-	case common.MetricGauge:
-		v, ok := hctx.strg.GetGauge(data.ID)
-		if !ok {
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
+	v, err := hctx.strg.GetMetric(data.ID, data.MType)
+	if err != nil {
+		switch err {
+		case common.ErrWrongMetricsName:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case common.ErrWrongMetricsType:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "error getting metric", http.StatusInternalServerError)
 		}
-		respData = common.Metrics{
-			ID:    data.ID,
-			MType: common.MetricGauge,
-			Value: (*float64)(&v),
-		}
-	case common.MetricCounter:
-		v, ok := hctx.strg.GetCounter(data.ID)
-		if !ok {
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
-		}
-		respData = common.Metrics{
-			ID:    data.ID,
-			MType: common.MetricCounter,
-			Delta: (*int64)(&v),
-		}
-	default:
-		http.Error(w, "Incorrect type", http.StatusBadRequest)
 		return
 	}
-	respJSON, err := json.Marshal(respData)
+
+	respJSON, err := json.Marshal(v)
 	if err != nil {
 		http.Error(w, "Error writing body", http.StatusInternalServerError)
 		return

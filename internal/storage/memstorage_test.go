@@ -5,6 +5,7 @@ import (
 
 	"github.com/ilegorro/almetrics/internal/common"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMemStorage_AddGauge(t *testing.T) {
@@ -14,13 +15,13 @@ func TestMemStorage_AddGauge(t *testing.T) {
 		name  string
 		mName string
 		value common.Gauge
-		want  common.Gauge
+		want  float64
 	}{
 		{
 			name:  "add gauge twice",
 			mName: "metric",
 			value: common.Gauge(testGauge),
-			want:  common.Gauge(testGauge),
+			want:  testGauge,
 		},
 	}
 	for _, tt := range tests {
@@ -28,9 +29,9 @@ func TestMemStorage_AddGauge(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			strg.AddGauge(tt.mName, tt.value)
 			strg.AddGauge(tt.mName, tt.value)
-			value, ok := strg.GetGauge(tt.mName)
-			assert.True(t, ok)
-			assert.Equal(t, value, tt.want)
+			v, err := strg.GetMetric(tt.mName, common.MetricGauge)
+			require.NoError(t, err)
+			assert.Equal(t, *v.Value, tt.want)
 		})
 	}
 }
@@ -42,13 +43,13 @@ func TestMemStorage_AddCounter(t *testing.T) {
 		name  string
 		mName string
 		value common.Counter
-		want  common.Counter
+		want  int64
 	}{
 		{
 			name:  "add counter twice",
 			mName: "metric",
 			value: common.Counter(testCounter),
-			want:  common.Counter(testCounter + testCounter),
+			want:  testCounter + testCounter,
 		},
 	}
 	for _, tt := range tests {
@@ -56,9 +57,9 @@ func TestMemStorage_AddCounter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			strg.AddCounter(tt.mName, tt.value)
 			strg.AddCounter(tt.mName, tt.value)
-			value, ok := strg.GetCounter(tt.mName)
-			assert.True(t, ok)
-			assert.Equal(t, value, tt.want)
+			v, err := strg.GetMetric(tt.mName, common.MetricCounter)
+			require.NoError(t, err)
+			assert.Equal(t, *v.Delta, tt.want)
 		})
 	}
 }
@@ -67,33 +68,37 @@ func TestMemStorage_GetGauge(t *testing.T) {
 	var testGauge float64 = 100
 
 	tests := []struct {
-		name       string
-		setName    string
-		getName    string
-		value      common.Gauge
-		wantStatus bool
+		name      string
+		setName   string
+		getName   string
+		value     common.Gauge
+		wantError error
 	}{
 		{
-			name:       "get right value",
-			setName:    "foo",
-			getName:    "foo",
-			value:      common.Gauge(testGauge),
-			wantStatus: true,
+			name:      "get right value",
+			setName:   "foo",
+			getName:   "foo",
+			value:     common.Gauge(testGauge),
+			wantError: nil,
 		},
 		{
-			name:       "get wrong value",
-			setName:    "foo",
-			getName:    "bar",
-			value:      common.Gauge(testGauge),
-			wantStatus: false,
+			name:      "get wrong value",
+			setName:   "foo",
+			getName:   "bar",
+			value:     common.Gauge(testGauge),
+			wantError: common.ErrWrongMetricsName,
 		},
 	}
 	for _, tt := range tests {
 		strg := NewMemStorage()
 		t.Run(tt.name, func(t *testing.T) {
 			strg.AddGauge(tt.setName, tt.value)
-			_, status := strg.GetGauge(tt.getName)
-			assert.Equal(t, status, tt.wantStatus)
+			_, err := strg.GetMetric(tt.getName, common.MetricGauge)
+			if tt.wantError == nil {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err, tt.wantError)
+			}
 		})
 	}
 }
@@ -102,33 +107,37 @@ func TestMemStorage_GetCounter(t *testing.T) {
 	var testCounter int64 = 100
 
 	tests := []struct {
-		name       string
-		setName    string
-		getName    string
-		value      common.Counter
-		wantStatus bool
+		name      string
+		setName   string
+		getName   string
+		value     common.Counter
+		wantError error
 	}{
 		{
-			name:       "get right value",
-			setName:    "foo",
-			getName:    "foo",
-			value:      common.Counter(testCounter),
-			wantStatus: true,
+			name:      "get right value",
+			setName:   "foo",
+			getName:   "foo",
+			value:     common.Counter(testCounter),
+			wantError: nil,
 		},
 		{
-			name:       "get wrong value",
-			setName:    "foo",
-			getName:    "bar",
-			value:      common.Counter(testCounter),
-			wantStatus: false,
+			name:      "get wrong value",
+			setName:   "foo",
+			getName:   "bar",
+			value:     common.Counter(testCounter),
+			wantError: common.ErrWrongMetricsName,
 		},
 	}
 	for _, tt := range tests {
 		strg := NewMemStorage()
 		t.Run(tt.name, func(t *testing.T) {
 			strg.AddCounter(tt.setName, tt.value)
-			_, status := strg.GetCounter(tt.getName)
-			assert.Equal(t, status, tt.wantStatus)
+			_, err := strg.GetMetric(tt.getName, common.MetricCounter)
+			if tt.wantError == nil {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err, tt.wantError)
+			}
 		})
 	}
 }

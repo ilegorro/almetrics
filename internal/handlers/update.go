@@ -8,11 +8,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ilegorro/almetrics/internal/common"
-	"github.com/ilegorro/almetrics/internal/server"
+	"github.com/ilegorro/almetrics/internal/filestorage"
 )
 
 func (hctx *HandlerContext) UpdateHandler(w http.ResponseWriter, r *http.Request) {
-	logger := common.SugaredLogger()
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 	mValue := chi.URLParam(r, "mValue")
@@ -20,26 +19,27 @@ func (hctx *HandlerContext) UpdateHandler(w http.ResponseWriter, r *http.Request
 	case common.MetricGauge:
 		val, err := strconv.ParseFloat(mValue, 64)
 		if err != nil {
-			http.Error(w, "Incorrect value", http.StatusBadRequest)
+			http.Error(w, common.ErrWrongMetricsValue.Error(), http.StatusBadRequest)
 			return
 		}
 		hctx.strg.AddGauge(mName, common.Gauge(val))
 	case common.MetricCounter:
 		val, err := strconv.ParseInt(mValue, 10, 64)
 		if err != nil {
-			http.Error(w, "Incorrect value", http.StatusBadRequest)
+			http.Error(w, common.ErrWrongMetricsValue.Error(), http.StatusBadRequest)
 			return
 		}
 		hctx.strg.AddCounter(mName, common.Counter(val))
 	default:
-		http.Error(w, "Incorrect type", http.StatusBadRequest)
+		http.Error(w, common.ErrWrongMetricsType.Error(), http.StatusBadRequest)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 	if hctx.syncPath != "" {
-		err := server.SaveMetrics(hctx.strg, hctx.syncPath)
+		sop := filestorage.Options{StoragePath: hctx.syncPath}
+		err := filestorage.SaveMetrics(hctx.strg, &sop)
 		if err != nil {
-			logger.Errorf("Unable to save metrics: %+v", err)
+			common.SugaredLogger().Errorf("Error saving metrics: %v", err)
 		}
 	}
 }
@@ -47,7 +47,6 @@ func (hctx *HandlerContext) UpdateHandler(w http.ResponseWriter, r *http.Request
 func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Request) {
 	var data common.Metrics
 	var buf bytes.Buffer
-	logger := common.SugaredLogger()
 
 	_, err := buf.ReadFrom(r.Body)
 	defer r.Body.Close()
@@ -60,37 +59,21 @@ func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var respData common.Metrics
-	switch data.MType {
-	case common.MetricGauge:
-		hctx.strg.AddGauge(data.ID, common.Gauge(*data.Value))
-		v, ok := hctx.strg.GetGauge(data.ID)
-		if !ok {
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
+	hctx.strg.AddMetric(&data)
+	v, err := hctx.strg.GetMetric(data.ID, data.MType)
+	if err != nil {
+		switch err {
+		case common.ErrWrongMetricsName:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case common.ErrWrongMetricsType:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "error getting metric", http.StatusInternalServerError)
 		}
-		respData = common.Metrics{
-			ID:    data.ID,
-			MType: common.MetricGauge,
-			Value: (*float64)(&v),
-		}
-	case common.MetricCounter:
-		hctx.strg.AddCounter(data.ID, common.Counter(*data.Delta))
-		v, ok := hctx.strg.GetCounter(data.ID)
-		if !ok {
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
-		}
-		respData = common.Metrics{
-			ID:    data.ID,
-			MType: common.MetricCounter,
-			Delta: (*int64)(&v),
-		}
-	default:
-		http.Error(w, "Incorrect type", http.StatusBadRequest)
 		return
 	}
-	respJSON, err := json.Marshal(respData)
+
+	respJSON, err := json.Marshal(v)
 	if err != nil {
 		http.Error(w, "Error writing body", http.StatusInternalServerError)
 		return
@@ -100,9 +83,10 @@ func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(respJSON))
 	if hctx.syncPath != "" {
-		err = server.SaveMetrics(hctx.strg, hctx.syncPath)
+		sop := filestorage.Options{StoragePath: hctx.syncPath}
+		err := filestorage.SaveMetrics(hctx.strg, &sop)
 		if err != nil {
-			logger.Errorf("Unable to save metrics: %+v", err)
+			common.SugaredLogger().Errorf("Error saving metrics: %v", err)
 		}
 	}
 }

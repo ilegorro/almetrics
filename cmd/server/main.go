@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/ilegorro/almetrics/internal/common"
+	"github.com/ilegorro/almetrics/internal/filestorage"
 	"github.com/ilegorro/almetrics/internal/handlers"
 	"github.com/ilegorro/almetrics/internal/server"
 	"github.com/ilegorro/almetrics/internal/storage"
@@ -18,7 +19,8 @@ func main() {
 	op := server.ParseFlags()
 	strg := storage.NewMemStorage()
 	if op.StorageRestore {
-		err := server.RestoreMetrics(strg, op.StoragePath)
+		sop := filestorage.Options{StoragePath: op.StoragePath}
+		err := filestorage.RestoreMetrics(strg, &sop)
 		if err != nil {
 			logger.Errorf("unable to restore metrics: %v", err)
 		}
@@ -27,7 +29,11 @@ func main() {
 	if op.StorageInterval == 0 {
 		syncPath = op.StoragePath
 	} else {
-		go server.SaveMetricsInterval(strg, op, &wg)
+		sop := filestorage.Options{
+			StoragePath:     op.StoragePath,
+			StorageInterval: op.StorageInterval,
+		}
+		go filestorage.SaveMetricsInterval(strg, &sop, &wg)
 	}
 	hctx := handlers.NewHandlerContext(strg, syncPath)
 	router := handlers.MetricsRouter(hctx)

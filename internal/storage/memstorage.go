@@ -12,47 +12,72 @@ type memStorage struct {
 	counter map[string]common.Counter
 }
 
-func (m *memStorage) LockMutex() {
-	m.mutex.Lock()
-}
-
-func (m *memStorage) UnlockMutex() {
-	m.mutex.Unlock()
-}
-
 func (m *memStorage) AddGauge(name string, value common.Gauge) {
-	m.LockMutex()
-	defer m.UnlockMutex()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	m.gauge[name] = value
 }
 
 func (m *memStorage) AddCounter(name string, value common.Counter) {
-	m.LockMutex()
-	defer m.UnlockMutex()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	m.counter[name] += value
 }
 
-func (m *memStorage) GetGauge(name string) (common.Gauge, bool) {
-	m.LockMutex()
-	defer m.UnlockMutex()
+func (m *memStorage) AddMetric(data *common.Metrics) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
-	v, ok := m.gauge[name]
-	return v, ok
+	switch data.MType {
+	case common.MetricGauge:
+		m.gauge[data.ID] = common.Gauge(*data.Value)
+	case common.MetricCounter:
+		m.counter[data.ID] += common.Counter(*data.Delta)
+	}
 }
 
-func (m *memStorage) GetCounter(name string) (common.Counter, bool) {
-	m.LockMutex()
-	defer m.UnlockMutex()
+func (m *memStorage) GetMetric(ID, MType string) (*common.Metrics, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
-	v, ok := m.counter[name]
-	return v, ok
+	var res common.Metrics
+	var err error
+
+	switch MType {
+	case common.MetricGauge:
+		v, ok := m.gauge[ID]
+		if ok {
+			res = common.Metrics{
+				ID:    ID,
+				MType: MType,
+				Value: (*float64)(&v),
+			}
+		} else {
+			err = common.ErrWrongMetricsName
+		}
+	case common.MetricCounter:
+		v, ok := m.counter[ID]
+		if ok {
+			res = common.Metrics{
+				ID:    ID,
+				MType: MType,
+				Delta: (*int64)(&v),
+			}
+		} else {
+			err = common.ErrWrongMetricsName
+		}
+	default:
+		err = common.ErrWrongMetricsType
+	}
+
+	return &res, err
 }
 
 func (m *memStorage) GetMetrics() []common.Metrics {
-	m.LockMutex()
-	defer m.UnlockMutex()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	var res []common.Metrics
 	for k, v := range m.gauge {

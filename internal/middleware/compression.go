@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-func WithCompression(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func WithCompression(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ow := w
 
 		acceptEncoding := r.Header.Get("Accept-Encoding")
@@ -32,8 +32,8 @@ func WithCompression(h http.HandlerFunc) http.HandlerFunc {
 			defer cr.Close()
 		}
 
-		h(ow, r)
-	}
+		h.ServeHTTP(ow, r)
+	})
 }
 
 type compressWriter struct {
