@@ -3,20 +3,73 @@ package server
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/caarlos0/env/v6"
+	"github.com/ilegorro/almetrics/internal/common"
 )
 
 type Config struct {
-	Address string `env:"ADDRESS"`
+	Address         string `env:"ADDRESS"`
+	StorageInterval int    `env:"STORE_INTERVAL"`
+	StoragePath     string `env:"FILE_STORAGE_PATH"`
+	StorageRestore  bool   `env:"RESTORE"`
 }
 
 type Options struct {
-	ReportHost string
-	ReportPort string
+	ReportHost      string
+	ReportPort      string
+	StorageInterval int
+	StoragePath     string
+	StorageRestore  bool
+}
+
+func ParseFlags() *Options {
+	logger := common.SugaredLogger()
+
+	var cfg Config
+	err := env.Parse(&cfg)
+	if err != nil {
+		logger.Errorf("Unable to parse env: %+v", err)
+	}
+
+	op := &Options{
+		ReportHost: "localhost",
+		ReportPort: "8080",
+	}
+	flag.IntVar(&op.StorageInterval, "i", 300, "store interval")
+	flag.BoolVar(&op.StorageRestore, "r", true, "restore from storage")
+	flag.StringVar(&op.StoragePath, "f", "/tmp/metrics-db.json", "file storage path")
+	flag.Func("a", "host and port (default localhost:8080)", func(flagValue string) error {
+		op.ReportHost, op.ReportPort, err = getAddressParts(flagValue)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	flag.Parse()
+
+	if cfg.StoragePath != "" {
+		op.StoragePath = cfg.StoragePath
+	}
+	if cfg.StorageInterval != 0 {
+		op.StorageInterval = cfg.StorageInterval
+	}
+	_, ok := os.LookupEnv("RESTORE")
+	if ok {
+		op.StorageRestore = cfg.StorageRestore
+	}
+
+	if cfg.Address != "" {
+		op.ReportHost, op.ReportPort, err = getAddressParts(cfg.Address)
+		if err != nil {
+			logger.Fatalf("Error parsing hostname and port: %+v", err)
+		}
+	}
+
+	return op
 }
 
 func (op *Options) GetEndpointURL() string {
@@ -34,34 +87,4 @@ func getAddressParts(s string) (string, string, error) {
 		port = u.Port()
 	}
 	return host, port, err
-}
-
-func ParseFlags() *Options {
-	var cfg Config
-	err := env.Parse(&cfg)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	op := &Options{
-		ReportHost: "localhost",
-		ReportPort: "8080",
-	}
-	flag.Func("a", "host and port (default localhost:8080)", func(flagValue string) error {
-		op.ReportHost, op.ReportPort, err = getAddressParts(flagValue)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	flag.Parse()
-
-	if cfg.Address != "" {
-		op.ReportHost, op.ReportPort, err = getAddressParts(cfg.Address)
-		if err != nil {
-			log.Fatalln(err)
-		}
-	}
-
-	return op
 }

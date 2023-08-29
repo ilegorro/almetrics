@@ -1,7 +1,8 @@
 package handlers
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/json"
 	"html/template"
 	"net/http"
 
@@ -28,36 +29,75 @@ func (hctx *HandlerContext) GetRootHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err = tmpl.Execute(w, hctx.strg.GetMetrics()); err != nil {
+	w.Header().Set("Content-Type", "text/html;charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	data := make(map[string]string, 0)
+	for _, v := range hctx.strg.GetMetrics() {
+		data[v.ID] = v.StringValue()
+	}
+	if err = tmpl.Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Add("Content-Type", "text/html")
-	w.Header().Add("Content-Type", "charset=utf-8")
 }
 
 func (hctx *HandlerContext) GetValueHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
-	var value string
-	switch mType {
-	case common.MetricGauge:
-		v, ok := hctx.strg.GetGauge(mName)
-		if !ok {
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
+
+	v, err := hctx.strg.GetMetric(mName, mType)
+	if err != nil {
+		switch err {
+		case common.ErrWrongMetricsName:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case common.ErrWrongMetricsType:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "error getting metric", http.StatusInternalServerError)
 		}
-		value = fmt.Sprintf("%v", v)
-	case common.MetricCounter:
-		v, ok := hctx.strg.GetCounter(mName)
-		if !ok {
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
-		}
-		value = fmt.Sprintf("%v", v)
-	default:
-		http.Error(w, "Incorrect type", http.StatusBadRequest)
 		return
 	}
-	w.Write([]byte(value))
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(v.StringValue()))
+}
+
+func (hctx *HandlerContext) GetValueJSONHandler(w http.ResponseWriter, r *http.Request) {
+
+	var data common.Metrics
+	var buf bytes.Buffer
+
+	_, err := buf.ReadFrom(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		http.Error(w, "Error reading body", http.StatusInternalServerError)
+		return
+	}
+	if err := json.Unmarshal(buf.Bytes(), &data); err != nil {
+		http.Error(w, "Error parsing body", http.StatusInternalServerError)
+		return
+	}
+
+	v, err := hctx.strg.GetMetric(data.ID, data.MType)
+	if err != nil {
+		switch err {
+		case common.ErrWrongMetricsName:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case common.ErrWrongMetricsType:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "error getting metric", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	respJSON, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, "Error writing body", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(respJSON))
 }
