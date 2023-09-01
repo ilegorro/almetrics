@@ -1,4 +1,4 @@
-package handlers
+package server
 
 import (
 	"bytes"
@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ilegorro/almetrics/internal/server/config"
 	"github.com/ilegorro/almetrics/internal/storage"
 	"github.com/stretchr/testify/assert"
 )
@@ -72,7 +74,9 @@ func TestUpdateHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			r := httptest.NewRequest(http.MethodPost, "/update", nil)
+			r = r.WithContext(ctx)
 			w := httptest.NewRecorder()
 			rctx := chi.NewRouteContext()
 			rctx.URLParams.Add("mType", tt.params.mType)
@@ -81,9 +85,11 @@ func TestUpdateHandler(t *testing.T) {
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 
 			strg := storage.NewMemStorage()
-			hctx := NewHandlerContext(strg, "")
-			h := http.HandlerFunc(hctx.UpdateHandler)
+			op := config.EmptyOptions()
+			app := NewApp(strg, op)
+			h := http.HandlerFunc(app.UpdateHandler)
 			h(w, r)
+			cancel()
 
 			result := w.Result()
 
@@ -134,13 +140,17 @@ func TestUpdateJSONHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			r := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewBuffer([]byte(tt.bodyJSON)))
+			r = r.WithContext(ctx)
 			w := httptest.NewRecorder()
 
 			strg := storage.NewMemStorage()
-			hctx := NewHandlerContext(strg, "")
-			h := http.HandlerFunc(hctx.UpdateJSONHandler)
+			op := config.EmptyOptions()
+			app := NewApp(strg, op)
+			h := http.HandlerFunc(app.UpdateJSONHandler)
 			h(w, r)
+			cancel()
 			result := w.Result()
 
 			assert.Equal(t, tt.want, result.StatusCode)

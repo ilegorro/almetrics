@@ -1,16 +1,19 @@
-package handlers
+package server
 
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ilegorro/almetrics/internal/common"
 	"github.com/ilegorro/almetrics/internal/middleware"
+	"github.com/ilegorro/almetrics/internal/server/config"
 	"github.com/ilegorro/almetrics/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -62,9 +65,10 @@ func TestGetValueJSONHandler(t *testing.T) {
 	}
 
 	strg := storage.NewMemStorage()
-	hctx := NewHandlerContext(strg, "")
-	updateHandler := http.HandlerFunc(hctx.UpdateJSONHandler)
-	valueHandler := http.HandlerFunc(hctx.GetValueJSONHandler)
+	op := config.EmptyOptions()
+	app := NewApp(strg, op)
+	updateHandler := http.HandlerFunc(app.UpdateJSONHandler)
+	valueHandler := http.HandlerFunc(app.GetValueJSONHandler)
 	mux := http.NewServeMux()
 	mux.Handle("/update/", middleware.WithCompression(updateHandler))
 	mux.Handle("/value/", middleware.WithCompression(valueHandler))
@@ -84,12 +88,14 @@ func TestGetValueJSONHandler(t *testing.T) {
 			err = zb.Close()
 			require.NoError(t, err)
 
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			r := httptest.NewRequest(http.MethodPost, srv.URL+"/update/", buf)
 			r.RequestURI = ""
 			r.Header.Set("Accept-Encoding", "gzip")
 			r.Header.Set("Content-Encoding", "gzip")
 			r.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(r)
+			resp, err := http.DefaultClient.Do(r.WithContext(ctx))
+			cancel()
 			require.NoError(t, err)
 
 			zr, err := gzip.NewReader(resp.Body)
@@ -115,12 +121,14 @@ func TestGetValueJSONHandler(t *testing.T) {
 			err = zb.Close()
 			require.NoError(t, err)
 
+			ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 			r = httptest.NewRequest(http.MethodPost, srv.URL+"/value/", buf)
 			r.RequestURI = ""
 			r.Header.Set("Accept-Encoding", "gzip")
 			r.Header.Set("Content-Encoding", "gzip")
 			r.Header.Set("Content-Type", "application/json")
-			resp, err = http.DefaultClient.Do(r)
+			resp, err = http.DefaultClient.Do(r.WithContext(ctx))
+			cancel()
 			require.NoError(t, err)
 
 			zr, err = gzip.NewReader(resp.Body)

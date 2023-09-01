@@ -1,44 +1,33 @@
 package storage
 
 import (
+	"context"
 	"sync"
 
 	"github.com/ilegorro/almetrics/internal/common"
 )
 
-type memStorage struct {
+type MemStorage struct {
 	mutex   sync.Mutex
-	gauge   map[string]common.Gauge
-	counter map[string]common.Counter
+	gauge   map[string]float64
+	counter map[string]int64
 }
 
-func (m *memStorage) AddGauge(name string, value common.Gauge) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	m.gauge[name] = value
-}
-
-func (m *memStorage) AddCounter(name string, value common.Counter) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	m.counter[name] += value
-}
-
-func (m *memStorage) AddMetric(data *common.Metrics) {
+func (m *MemStorage) AddMetric(ctx context.Context, data *common.Metrics) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	switch data.MType {
 	case common.MetricGauge:
-		m.gauge[data.ID] = common.Gauge(*data.Value)
+		m.gauge[data.ID] = *data.Value
 	case common.MetricCounter:
-		m.counter[data.ID] += common.Counter(*data.Delta)
+		m.counter[data.ID] += *data.Delta
 	}
+
+	return nil
 }
 
-func (m *memStorage) GetMetric(ID, MType string) (*common.Metrics, error) {
+func (m *MemStorage) GetMetric(ctx context.Context, ID, MType string) (*common.Metrics, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -52,10 +41,10 @@ func (m *memStorage) GetMetric(ID, MType string) (*common.Metrics, error) {
 			res = common.Metrics{
 				ID:    ID,
 				MType: MType,
-				Value: (*float64)(&v),
+				Value: &v,
 			}
 		} else {
-			err = common.ErrWrongMetricsName
+			err = common.ErrWrongMetricsID
 		}
 	case common.MetricCounter:
 		v, ok := m.counter[ID]
@@ -63,10 +52,10 @@ func (m *memStorage) GetMetric(ID, MType string) (*common.Metrics, error) {
 			res = common.Metrics{
 				ID:    ID,
 				MType: MType,
-				Delta: (*int64)(&v),
+				Delta: &v,
 			}
 		} else {
-			err = common.ErrWrongMetricsName
+			err = common.ErrWrongMetricsID
 		}
 	default:
 		err = common.ErrWrongMetricsType
@@ -75,7 +64,7 @@ func (m *memStorage) GetMetric(ID, MType string) (*common.Metrics, error) {
 	return &res, err
 }
 
-func (m *memStorage) GetMetrics() []common.Metrics {
+func (m *MemStorage) GetMetrics(ctx context.Context) ([]common.Metrics, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -96,13 +85,13 @@ func (m *memStorage) GetMetrics() []common.Metrics {
 			Delta: &val,
 		})
 	}
-	return res
+	return res, nil
 }
 
-func NewMemStorage() common.Repository {
-	m := &memStorage{}
-	m.gauge = make(map[string]common.Gauge)
-	m.counter = make(map[string]common.Counter)
+func NewMemStorage() *MemStorage {
+	m := &MemStorage{}
+	m.gauge = make(map[string]float64)
+	m.counter = make(map[string]int64)
 
 	return m
 }

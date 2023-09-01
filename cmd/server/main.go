@@ -6,8 +6,8 @@ import (
 
 	"github.com/ilegorro/almetrics/internal/common"
 	"github.com/ilegorro/almetrics/internal/filestorage"
-	"github.com/ilegorro/almetrics/internal/handlers"
 	"github.com/ilegorro/almetrics/internal/server"
+	"github.com/ilegorro/almetrics/internal/server/config"
 	"github.com/ilegorro/almetrics/internal/storage"
 )
 
@@ -16,28 +16,26 @@ func main() {
 	wg.Add(1)
 	logger := common.SugaredLogger()
 
-	op := server.ParseFlags()
+	op := config.ReadOptions()
 	strg := storage.NewMemStorage()
-	if op.StorageRestore {
-		sop := filestorage.Options{StoragePath: op.StoragePath}
+	if op.Storage.Restore {
+		sop := filestorage.Options{StoragePath: op.Storage.Path}
 		err := filestorage.RestoreMetrics(strg, &sop)
 		if err != nil {
 			logger.Errorf("unable to restore metrics: %v", err)
 		}
 	}
-	var syncPath string
-	if op.StorageInterval == 0 {
-		syncPath = op.StoragePath
-	} else {
+
+	if op.Storage.Interval > 0 {
 		sop := filestorage.Options{
-			StoragePath:     op.StoragePath,
-			StorageInterval: op.StorageInterval,
+			StoragePath:     op.Storage.Path,
+			StorageInterval: op.Storage.Interval,
 		}
 		go filestorage.SaveMetricsInterval(strg, &sop, &wg)
 	}
-	hctx := handlers.NewHandlerContext(strg, syncPath)
-	router := handlers.MetricsRouter(hctx)
-	endPoint := op.GetEndpointURL()
+	app := server.NewApp(strg, op)
+	router := server.MetricsRouter(app)
+	endPoint := op.EndpointURL
 
 	if err := http.ListenAndServe(endPoint, router); err != http.ErrServerClosed {
 		logger.Fatalln(err)

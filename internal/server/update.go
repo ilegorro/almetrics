@@ -1,20 +1,23 @@
-package handlers
+package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ilegorro/almetrics/internal/common"
 	"github.com/ilegorro/almetrics/internal/filestorage"
 )
 
-func (hctx *HandlerContext) UpdateHandler(w http.ResponseWriter, r *http.Request) {
+func (app *App) UpdateHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 	mValue := chi.URLParam(r, "mValue")
+	metrics := common.Metrics{ID: mName, MType: mType}
 	switch mType {
 	case common.MetricGauge:
 		val, err := strconv.ParseFloat(mValue, 64)
@@ -22,29 +25,37 @@ func (hctx *HandlerContext) UpdateHandler(w http.ResponseWriter, r *http.Request
 			http.Error(w, common.ErrWrongMetricsValue.Error(), http.StatusBadRequest)
 			return
 		}
-		hctx.strg.AddGauge(mName, common.Gauge(val))
+		metrics.Value = &val
 	case common.MetricCounter:
 		val, err := strconv.ParseInt(mValue, 10, 64)
 		if err != nil {
 			http.Error(w, common.ErrWrongMetricsValue.Error(), http.StatusBadRequest)
 			return
 		}
-		hctx.strg.AddCounter(mName, common.Counter(val))
+		metrics.Delta = &val
 	default:
 		http.Error(w, common.ErrWrongMetricsType.Error(), http.StatusBadRequest)
 		return
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := app.strg.AddMetric(ctx, &metrics)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
 	w.WriteHeader(http.StatusOK)
-	if hctx.syncPath != "" {
-		sop := filestorage.Options{StoragePath: hctx.syncPath}
-		err := filestorage.SaveMetrics(hctx.strg, &sop)
+	if app.syncFileStorage {
+		sop := filestorage.Options{StoragePath: app.options.Storage.Path}
+		err := filestorage.SaveMetrics(app.strg, &sop)
 		if err != nil {
 			common.SugaredLogger().Errorf("Error saving metrics: %v", err)
 		}
 	}
 }
 
-func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Request) {
+func (app *App) UpdateJSONHandler(w http.ResponseWriter, r *http.Request) {
 	var data common.Metrics
 	var buf bytes.Buffer
 
@@ -59,11 +70,19 @@ func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	hctx.strg.AddMetric(&data)
-	v, err := hctx.strg.GetMetric(data.ID, data.MType)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	err = app.strg.AddMetric(ctx, &data)
+	cancel()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+	v, err := app.strg.GetMetric(ctx, data.ID, data.MType)
+	cancel()
 	if err != nil {
 		switch err {
-		case common.ErrWrongMetricsName:
+		case common.ErrWrongMetricsID:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		case common.ErrWrongMetricsType:
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -82,9 +101,9 @@ func (hctx *HandlerContext) UpdateJSONHandler(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(respJSON))
-	if hctx.syncPath != "" {
-		sop := filestorage.Options{StoragePath: hctx.syncPath}
-		err := filestorage.SaveMetrics(hctx.strg, &sop)
+	if app.syncFileStorage {
+		sop := filestorage.Options{StoragePath: app.options.Storage.Path}
+		err := filestorage.SaveMetrics(app.strg, &sop)
 		if err != nil {
 			common.SugaredLogger().Errorf("Error saving metrics: %v", err)
 		}
