@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -87,14 +88,14 @@ func (app *App) UpdateJSONHandler(w http.ResponseWriter, r *http.Request) {
 		case common.ErrWrongMetricsType:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
-			http.Error(w, "error getting metric", http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("error getting metric: %v", err.Error()), http.StatusInternalServerError)
 		}
 		return
 	}
 
 	respJSON, err := json.Marshal(v)
 	if err != nil {
-		http.Error(w, "Error writing body", http.StatusInternalServerError)
+		http.Error(w, "error writing body", http.StatusInternalServerError)
 		return
 	}
 
