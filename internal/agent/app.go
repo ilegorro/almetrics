@@ -96,19 +96,11 @@ func (app *App) Report(url string) error {
 	app.mutex.Lock()
 	defer app.mutex.Unlock()
 
-	for _, v := range app.metrics {
-		err := reportPostData(v, url)
-		if err != nil {
-			return err
-		}
+	if len(app.metrics) == 0 {
+		return nil
 	}
-	app.metrics = nil
 
-	return nil
-}
-
-func reportPostData(data common.Metrics, url string) error {
-	dataJSON, err := json.Marshal(data)
+	dataJSON, err := json.Marshal(app.metrics)
 	if err != nil {
 		return err
 	}
@@ -136,6 +128,9 @@ func reportPostData(data common.Metrics, url string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
+
+	app.metrics = nil
+
 	return nil
 }

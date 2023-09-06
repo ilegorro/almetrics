@@ -27,6 +27,22 @@ func (m *MemStorage) AddMetric(ctx context.Context, data *common.Metrics) error 
 	return nil
 }
 
+func (m *MemStorage) AddMetrics(ctx context.Context, data []common.Metrics) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for _, v := range data {
+		switch v.MType {
+		case common.MetricGauge:
+			m.gauge[v.ID] = *v.Value
+		case common.MetricCounter:
+			m.counter[v.ID] += *v.Delta
+		}
+	}
+
+	return nil
+}
+
 func (m *MemStorage) GetMetric(ctx context.Context, ID, MType string) (*common.Metrics, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()

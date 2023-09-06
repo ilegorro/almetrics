@@ -12,6 +12,7 @@ const (
 
 type Repository interface {
 	AddMetric(context.Context, *Metrics) error
+	AddMetrics(context.Context, []Metrics) error
 	GetMetric(context.Context, string, string) (*Metrics, error)
 	GetMetrics(context.Context) ([]Metrics, error)
 }

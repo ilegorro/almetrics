@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"net/http"
 	"time"
@@ -67,7 +68,7 @@ func (app *App) GetValueHandler(w http.ResponseWriter, r *http.Request) {
 		case common.ErrWrongMetricsType:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
-			http.Error(w, "error getting metric", http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("error getting metric: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}
@@ -102,7 +103,7 @@ func (app *App) GetValueJSONHandler(w http.ResponseWriter, r *http.Request) {
 		case common.ErrWrongMetricsType:
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
-			http.Error(w, "error getting metric", http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("error getting metric: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}

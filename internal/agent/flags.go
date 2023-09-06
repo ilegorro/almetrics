@@ -24,7 +24,7 @@ type Options struct {
 }
 
 func (op *Options) GetReportURL() string {
-	return fmt.Sprintf("http://%v:%v/update/", op.ReportHost, op.ReportPort)
+	return fmt.Sprintf("http://%v:%v/updates/", op.ReportHost, op.ReportPort)
 }
 
 func getAddressParts(s string) (string, string, error) {

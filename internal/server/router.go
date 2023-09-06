@@ -12,6 +12,7 @@ func MetricsRouter(app *App) chi.Router {
 
 	r.Post("/update/{mType}/{mName}/{mValue}", app.UpdateHandler)
 	r.Post("/update/", app.UpdateJSONHandler)
+	r.Post("/updates/", app.UpdatesHandler)
 	r.Get("/value/{mType}/{mName}", app.GetValueHandler)
 	r.Post("/value/", app.GetValueJSONHandler)
 	r.Get("/ping", app.PingDBHandler)
