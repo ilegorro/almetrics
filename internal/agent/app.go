@@ -5,10 +5,13 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ilegorro/almetrics/internal/common"
@@ -102,31 +105,41 @@ func (app *App) Report(url string) error {
 
 	dataJSON, err := json.Marshal(app.metrics)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal report: %w", err)
 	}
 
 	buf := bytes.NewBuffer(nil)
 	zb := gzip.NewWriter(buf)
 	_, err = zb.Write([]byte(dataJSON))
 	if err != nil {
-		return err
+		return fmt.Errorf("compress report: %w", err)
 	}
 	if err = zb.Close(); err != nil {
-		return err
+		return fmt.Errorf("close gzip: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	r, err := http.NewRequestWithContext(ctx, http.MethodPost, url, buf)
 	if err != nil {
-		return err
+		return fmt.Errorf("create request: %w", err)
 	}
 	r.Header.Set("Accept-Encoding", "gzip")
 	r.Header.Set("Content-Encoding", "gzip")
 	r.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(r)
+
+	var resp *http.Response
+	attempts := 0
+	for {
+		resp, err = http.DefaultClient.Do(r)
+		if attempts == 3 || !(errors.Is(err, syscall.ECONNREFUSED)) {
+			break
+		}
+		attempts += 1
+		time.Sleep(time.Duration((attempts*2)-1) * time.Second)
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("perform request: %w", err)
 	}
 	resp.Body.Close()
 

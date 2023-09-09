@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -81,14 +82,14 @@ func (app *App) UpdateJSONHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 	v, err := app.strg.GetMetric(ctx, data.ID, data.MType)
 	cancel()
+
 	if err != nil {
-		switch err {
-		case common.ErrWrongMetricsID:
+		if errors.Is(err, common.ErrWrongMetricsID) {
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case common.ErrWrongMetricsType:
+		} else if errors.Is(err, common.ErrWrongMetricsType) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		default:
-			http.Error(w, fmt.Sprintf("error getting metric: %v", err.Error()), http.StatusInternalServerError)
+		} else {
+			http.Error(w, fmt.Sprintf("error getting metric: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}

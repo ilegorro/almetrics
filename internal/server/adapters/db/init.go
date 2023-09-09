@@ -1,25 +1,24 @@
 package db
 
 import (
-	"database/sql"
+	"context"
+	"fmt"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type Adapter struct {
-	Conn *sql.DB
+	Pool *pgxpool.Pool
 }
 
-func New(dsn string) (*Adapter, error) {
+func New(ctx context.Context, dsn string) (*Adapter, error) {
 	a := &Adapter{}
-	db, err := sql.Open("pgx", dsn)
-	if err == nil {
-		a.Conn = db
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("create db pool: %w", err)
 	}
+	a.Pool = pool
 
-	return a, err
-}
-
-func (a *Adapter) Close() {
-	a.Conn.Close()
+	return a, nil
 }

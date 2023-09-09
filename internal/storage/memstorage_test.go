@@ -93,7 +93,7 @@ func TestMemStorage_GetMetric(t *testing.T) {
 			m, err := strg.GetMetric(ctx, tt.mID, tt.mType)
 			cancel()
 			if tt.wantError != nil {
-				assert.ErrorIs(t, tt.wantError, err)
+				assert.ErrorIs(t, err, tt.wantError)
 			} else if tt.wantValue != 0 {
 				assert.Equal(t, tt.wantValue, *m.Value)
 			} else if tt.wantDelta != 0 {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -62,12 +63,11 @@ func (app *App) GetValueHandler(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	v, err := app.strg.GetMetric(ctx, mName, mType)
 	if err != nil {
-		switch err {
-		case common.ErrWrongMetricsID:
+		if errors.Is(err, common.ErrWrongMetricsID) {
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case common.ErrWrongMetricsType:
+		} else if errors.Is(err, common.ErrWrongMetricsType) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		default:
+		} else {
 			http.Error(w, fmt.Sprintf("error getting metric: %v", err), http.StatusInternalServerError)
 		}
 		return
@@ -97,12 +97,11 @@ func (app *App) GetValueJSONHandler(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	v, err := app.strg.GetMetric(ctx, data.ID, data.MType)
 	if err != nil {
-		switch err {
-		case common.ErrWrongMetricsID:
+		if errors.Is(err, common.ErrWrongMetricsID) {
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case common.ErrWrongMetricsType:
+		} else if errors.Is(err, common.ErrWrongMetricsType) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		default:
+		} else {
 			http.Error(w, fmt.Sprintf("error getting metric: %v", err), http.StatusInternalServerError)
 		}
 		return

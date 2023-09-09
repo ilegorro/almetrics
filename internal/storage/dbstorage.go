@@ -4,54 +4,84 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ilegorro/almetrics/internal/common"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/exp/slices"
 )
 
 type DBStorage struct {
-	conn *sql.DB
+	pool *pgxpool.Pool
 }
 
 func (s *DBStorage) AddMetric(ctx context.Context, data *common.Metrics) error {
-	var dbDelta int64
-	var value float64
-	var delta int64
+	var pgErr *pgconn.PgError
+	var dbDelta sql.NullInt64
+	var value *float64
+	var delta *int64
 
-	err := s.conn.QueryRowContext(ctx, `
+	switch data.MType {
+	case common.MetricGauge:
+		value = data.Value
+	case common.MetricCounter:
+		delta = data.Delta
+	}
+
+	err := s.pool.QueryRow(ctx, `
 		SELECT m_delta FROM metrics
 		WHERE m_id = $1 AND m_type = $2;
 	`, data.ID, data.MType).Scan(&dbDelta)
 
-	switch data.MType {
-	case common.MetricGauge:
-		value = *data.Value
-	case common.MetricCounter:
-		delta = *data.Delta + dbDelta
-	}
-
 	if err == nil {
-		_, err = s.conn.ExecContext(ctx, `
-			UPDATE metrics SET
-				m_value = $3,
-				m_delta = $4
-			WHERE m_id = $1 AND m_type = $2;
-		`, data.ID, data.MType, value, delta)
-	} else if err == sql.ErrNoRows {
-		_, err = s.conn.ExecContext(ctx, `
-			INSERT INTO metrics(m_id, m_type, m_value, m_delta)
-			VALUES ($1, $2, $3, $4);
-		`, data.ID, data.MType, value, delta)
+		var deltaSum int64
+		if dbDelta.Valid {
+			deltaSum = dbDelta.Int64 + *delta
+			delta = &deltaSum
+		}
+		attempts := 0
+		for {
+			_, err = s.pool.Exec(ctx, `
+				UPDATE metrics SET
+					m_value = $3,
+					m_delta = $4
+				WHERE m_id = $1 AND m_type = $2;
+			`, data.ID, data.MType, value, delta)
+			if attempts == 3 || !(errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code)) {
+				break
+			}
+			attempts += 1
+			time.Sleep(time.Duration((attempts*2)-1) * time.Second)
+		}
+	} else if err == pgx.ErrNoRows {
+		attempts := 0
+		for {
+			_, err = s.pool.Exec(ctx, `
+				INSERT INTO metrics(m_id, m_type, m_value, m_delta)
+				VALUES ($1, $2, $3, $4);
+			`, data.ID, data.MType, value, delta)
+			if attempts == 3 || !(errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code)) {
+				break
+			}
+			attempts += 1
+			time.Sleep(time.Duration((attempts*2)-1) * time.Second)
+		}
+	} else {
+		return fmt.Errorf("add metric: %w", err)
 	}
 
-	return err
+	return nil
 }
 
 func (s *DBStorage) AddMetrics(ctx context.Context, data []common.Metrics) error {
 	metrics, err := s.GetMetrics(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("get metrics: %w", err)
 	}
 	var exist []string
 	existCounters := make(map[string]int64, 0)
@@ -64,123 +94,127 @@ func (s *DBStorage) AddMetrics(ctx context.Context, data []common.Metrics) error
 		}
 	}
 
-	tx, err := s.conn.Begin()
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback()
-
-	insQuery, err := tx.PrepareContext(ctx, `
-		INSERT INTO metrics(m_id, m_type, m_value, m_delta)
-		VALUES ($1, $2, $3, $4);
-	`)
-	if err != nil {
-		return err
-	}
-	defer insQuery.Close()
-
-	updQuery, err := tx.PrepareContext(ctx, `
-		UPDATE metrics SET
-			m_value = $3,
-			m_delta = $4
-		WHERE m_id = $1 AND m_type = $2;
-	`)
-	if err != nil {
-		return err
-	}
-	defer updQuery.Close()
+	defer tx.Rollback(ctx)
 
 	for _, v := range data {
-		var value float64
-		var delta int64
-		switch v.MType {
-		case common.MetricGauge:
-			value = *v.Value
-		case common.MetricCounter:
-			delta = *v.Delta
-		}
+		var value *float64
+		var delta *int64
 
 		h := sha256.New()
 		h.Write([]byte(fmt.Sprintf("%v, %v", v.ID, v.MType)))
+
+		switch v.MType {
+		case common.MetricGauge:
+			value = v.Value
+		case common.MetricCounter:
+			delta = v.Delta
+			if slices.Contains(exist, string(h.Sum(nil))) {
+				existCounters[v.ID] += *delta
+			} else {
+				existCounters[v.ID] = *delta
+			}
+			deltaCurrent := existCounters[v.ID]
+			delta = &deltaCurrent
+		}
+
 		if slices.Contains(exist, string(h.Sum(nil))) {
-			existCounters[v.ID] += delta
-			_, err = updQuery.ExecContext(ctx, v.ID, v.MType, value, existCounters[v.ID])
+			_, err = tx.Exec(ctx, `
+				UPDATE metrics SET
+					m_value = $3,
+					m_delta = $4
+				WHERE m_id = $1 AND m_type = $2;
+			`, v.ID, v.MType, value, delta)
 			if err != nil {
-				return err
+				return fmt.Errorf("update metric: %w", err)
 			}
 		} else {
-			_, err = insQuery.ExecContext(ctx, v.ID, v.MType, value, delta)
+			_, err = tx.Exec(ctx, `
+				INSERT INTO metrics(m_id, m_type, m_value, m_delta)
+				VALUES ($1, $2, $3, $4);
+			`, v.ID, v.MType, value, delta)
 			if err != nil {
-				return err
+				return fmt.Errorf("insert metric: %w", err)
 			}
 			h := sha256.New()
 			h.Write([]byte(fmt.Sprintf("%v, %v", v.ID, v.MType)))
 			exist = append(exist, string(h.Sum(nil)))
-			existCounters[v.ID] = delta
 		}
 	}
-	tx.Commit()
+	tx.Commit(ctx)
 
 	return nil
 }
 
 func (s *DBStorage) GetMetric(ctx context.Context, ID, MType string) (*common.Metrics, error) {
-	row := s.conn.QueryRowContext(ctx, `
+	row := s.pool.QueryRow(ctx, `
 		SELECT m_id, m_type, m_value, m_delta FROM metrics
 		WHERE m_id = $1 AND m_type = $2;
 	`, ID, MType)
 
 	var res common.Metrics
-	var value float64
-	var delta int64
+	var value sql.NullFloat64
+	var delta sql.NullInt64
 	if MType != common.MetricCounter && MType != common.MetricGauge {
-		return nil, common.ErrWrongMetricsType
+		return nil, fmt.Errorf("get metric: %w", common.ErrWrongMetricsType)
 	}
 	err := row.Scan(&res.ID, &res.MType, &value, &delta)
-	if err == sql.ErrNoRows {
-		return nil, common.ErrWrongMetricsID
+	if err == pgx.ErrNoRows {
+		return nil, fmt.Errorf("get metric: %w", common.ErrWrongMetricsID)
 	}
-	if err == nil {
-		res.Value = &value
-		res.Delta = &delta
+	if err != nil {
+		return nil, fmt.Errorf("get metric: %w", err)
+	}
+	if value.Valid {
+		res.Value = &value.Float64
+	}
+	if delta.Valid {
+		res.Delta = &delta.Int64
 	}
 
-	return &res, err
+	return &res, nil
 }
 
 func (s *DBStorage) GetMetrics(ctx context.Context) ([]common.Metrics, error) {
 	var res []common.Metrics
 
-	rows, err := s.conn.QueryContext(ctx, "SELECT m_id, m_type, m_value, m_delta FROM metrics;")
+	rows, err := s.pool.Query(ctx, "SELECT m_id, m_type, m_value, m_delta FROM metrics;")
 	if err != nil {
-		return res, err
+		return nil, fmt.Errorf("get metrics: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var m common.Metrics
-		var value float64
-		var delta int64
+		var value sql.NullFloat64
+		var delta sql.NullInt64
 		err = rows.Scan(&m.ID, &m.MType, &value, &delta)
 		if err != nil {
-			return res, err
+			return nil, fmt.Errorf("get metrics: %w", err)
 		}
-		m.Value = &value
-		m.Delta = &delta
+		if value.Valid {
+			m.Value = &value.Float64
+		}
+		if delta.Valid {
+			m.Delta = &delta.Int64
+		}
 		res = append(res, m)
 	}
 
 	err = rows.Err()
 	if err != nil {
-		return res, err
+		return nil, fmt.Errorf("get metrics: %w", err)
 	}
 
 	return res, nil
 }
 
-func NewDBStorage(ctx context.Context, conn *sql.DB) (*DBStorage, error) {
-	s := &DBStorage{conn: conn}
-	_, err := conn.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS metrics (
+func NewDBStorage(ctx context.Context, pool *pgxpool.Pool) (*DBStorage, error) {
+	s := &DBStorage{pool: pool}
+	_, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS metrics (
 		id serial PRIMARY KEY,
 		m_id VARCHAR(255) UNIQUE NOT NULL,
 		m_type VARCHAR(255) NOT NULL,
@@ -188,5 +222,9 @@ func NewDBStorage(ctx context.Context, conn *sql.DB) (*DBStorage, error) {
 		m_delta INT8
 	);`)
 
-	return s, err
+	if err != nil {
+		return nil, fmt.Errorf("init db storage: %w", err)
+	}
+
+	return s, nil
 }

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/ilegorro/almetrics/internal/common"
@@ -77,7 +78,11 @@ func (m *MemStorage) GetMetric(ctx context.Context, ID, MType string) (*common.M
 		err = common.ErrWrongMetricsType
 	}
 
-	return &res, err
+	if err != nil {
+		return nil, fmt.Errorf("get metric: %w", err)
+	}
+
+	return &res, nil
 }
 
 func (m *MemStorage) GetMetrics(ctx context.Context) ([]common.Metrics, error) {

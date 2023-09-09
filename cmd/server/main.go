@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -53,18 +54,18 @@ func main() {
 
 func Storage(op *config.Options) (common.Repository, error) {
 	var strg common.Repository
+	ctx := context.Background()
 
 	if op.DBDSN == "" {
 		strg = storage.NewMemStorage()
 	} else {
-		dbAdapter, err := db.New(op.DBDSN)
+		dbAdapter, err := db.New(ctx, op.DBDSN)
 		if err != nil {
-			return strg, err
+			return nil, fmt.Errorf("db storage adapter: %w", err)
 		}
-		ctx := context.Background()
-		strg, err = storage.NewDBStorage(ctx, dbAdapter.Conn)
+		strg, err = storage.NewDBStorage(ctx, dbAdapter.Pool)
 		if err != nil {
-			return strg, err
+			return nil, fmt.Errorf("db storage: %w", err)
 		}
 	}
 
