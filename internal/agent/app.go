@@ -5,13 +5,11 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/ilegorro/almetrics/internal/common"
@@ -128,16 +126,7 @@ func (app *App) Report(url string) error {
 	r.Header.Set("Content-Encoding", "gzip")
 	r.Header.Set("Content-Type", "application/json")
 
-	var resp *http.Response
-	attempts := 0
-	for {
-		resp, err = http.DefaultClient.Do(r)
-		if attempts == 3 || !(errors.Is(err, syscall.ECONNREFUSED)) {
-			break
-		}
-		attempts += 1
-		time.Sleep(time.Duration((attempts*2)-1) * time.Second)
-	}
+	resp, err := common.WithRetryDo(http.DefaultClient.Do, r)
 	if err != nil {
 		return fmt.Errorf("perform request: %w", err)
 	}

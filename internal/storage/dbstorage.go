@@ -6,12 +6,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/ilegorro/almetrics/internal/common"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/exp/slices"
 )
@@ -21,7 +18,6 @@ type DBStorage struct {
 }
 
 func (s *DBStorage) AddMetric(ctx context.Context, data *common.Metrics) error {
-	var pgErr *pgconn.PgError
 	var dbDelta sql.NullInt64
 	var value *float64
 	var delta *int64
@@ -38,41 +34,28 @@ func (s *DBStorage) AddMetric(ctx context.Context, data *common.Metrics) error {
 		WHERE m_id = $1 AND m_type = $2;
 	`, data.ID, data.MType).Scan(&dbDelta)
 
-	if err == nil {
-		var deltaSum int64
-		if dbDelta.Valid {
-			deltaSum = dbDelta.Int64 + *delta
-			delta = &deltaSum
-		}
-		attempts := 0
-		for {
-			_, err = s.pool.Exec(ctx, `
-				UPDATE metrics SET
-					m_value = $3,
-					m_delta = $4
-				WHERE m_id = $1 AND m_type = $2;
-			`, data.ID, data.MType, value, delta)
-			if attempts == 3 || !(errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code)) {
-				break
-			}
-			attempts += 1
-			time.Sleep(time.Duration((attempts*2)-1) * time.Second)
-		}
-	} else if err == pgx.ErrNoRows {
-		attempts := 0
-		for {
-			_, err = s.pool.Exec(ctx, `
-				INSERT INTO metrics(m_id, m_type, m_value, m_delta)
-				VALUES ($1, $2, $3, $4);
-			`, data.ID, data.MType, value, delta)
-			if attempts == 3 || !(errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code)) {
-				break
-			}
-			attempts += 1
-			time.Sleep(time.Duration((attempts*2)-1) * time.Second)
-		}
-	} else {
-		return fmt.Errorf("add metric: %w", err)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = common.WithRetryExec(s.pool.Exec, ctx, `
+			INSERT INTO metrics(m_id, m_type, m_value, m_delta)
+			VALUES ($1, $2, $3, $4);
+		`, data.ID, data.MType, value, delta)
+	}
+	if err != nil {
+		return fmt.Errorf("get insert metric: %w", err)
+	}
+
+	if dbDelta.Valid {
+		*delta += dbDelta.Int64
+	}
+
+	err = common.WithRetryExec(s.pool.Exec, ctx, `
+		UPDATE metrics SET
+			m_value = $3,
+			m_delta = $4
+		WHERE m_id = $1 AND m_type = $2;
+	`, data.ID, data.MType, value, delta)
+	if err != nil {
+		return fmt.Errorf("update metric: %w", err)
 	}
 
 	return nil
@@ -162,7 +145,7 @@ func (s *DBStorage) GetMetric(ctx context.Context, ID, MType string) (*common.Me
 		return nil, fmt.Errorf("get metric: %w", common.ErrWrongMetricsType)
 	}
 	err := row.Scan(&res.ID, &res.MType, &value, &delta)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("get metric: %w", common.ErrWrongMetricsID)
 	}
 	if err != nil {

@@ -95,7 +95,7 @@ func parseFlags(op *Options) {
 	flag.Func("a", "host and port (default localhost:8080)", func(flagValue string) error {
 		v, err := getEndpoint(flagValue)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse a flag: %w", err)
 		}
 		op.Endpoint = v
 
@@ -114,10 +114,11 @@ func getEndpoint(s string) (*Endpoint, error) {
 		s = "https://" + s
 	}
 	u, err := url.Parse(s)
-	if err == nil {
-		e.Hostname = u.Hostname()
-		e.Port = u.Port()
+	if err != nil {
+		return nil, fmt.Errorf("get endpoint: %w", err)
 	}
+	e.Hostname = u.Hostname()
+	e.Port = u.Port()
 
-	return e, err
+	return e, nil
 }
