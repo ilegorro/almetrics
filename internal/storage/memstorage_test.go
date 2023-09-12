@@ -1,142 +1,103 @@
 package storage
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/ilegorro/almetrics/internal/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestMemStorage_AddGauge(t *testing.T) {
+func TestMemStorage_AddMetric(t *testing.T) {
+	var testCounter int64 = 100
 	var testGauge float64 = 100
 
 	tests := []struct {
-		name  string
-		mName string
-		value common.Gauge
-		want  float64
+		name    string
+		metrics *common.Metrics
 	}{
 		{
-			name:  "add gauge twice",
-			mName: "metric",
-			value: common.Gauge(testGauge),
-			want:  testGauge,
+			name:    "Add counter",
+			metrics: &common.Metrics{ID: "foo", MType: common.MetricGauge, Value: &testGauge},
+		},
+		{
+			name:    "Add gauge",
+			metrics: &common.Metrics{ID: "bar", MType: common.MetricCounter, Delta: &testCounter},
 		},
 	}
 	for _, tt := range tests {
-		strg := NewMemStorage()
 		t.Run(tt.name, func(t *testing.T) {
-			strg.AddGauge(tt.mName, tt.value)
-			strg.AddGauge(tt.mName, tt.value)
-			v, err := strg.GetMetric(tt.mName, common.MetricGauge)
-			require.NoError(t, err)
-			assert.Equal(t, *v.Value, tt.want)
+			strg := NewMemStorage()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := strg.AddMetric(ctx, tt.metrics)
+			cancel()
+			assert.NoError(t, err)
 		})
 	}
 }
 
-func TestMemStorage_AddCounter(t *testing.T) {
+func TestMemStorage_GetMetric(t *testing.T) {
 	var testCounter int64 = 100
-
-	tests := []struct {
-		name  string
-		mName string
-		value common.Counter
-		want  int64
-	}{
-		{
-			name:  "add counter twice",
-			mName: "metric",
-			value: common.Counter(testCounter),
-			want:  testCounter + testCounter,
-		},
-	}
-	for _, tt := range tests {
-		strg := NewMemStorage()
-		t.Run(tt.name, func(t *testing.T) {
-			strg.AddCounter(tt.mName, tt.value)
-			strg.AddCounter(tt.mName, tt.value)
-			v, err := strg.GetMetric(tt.mName, common.MetricCounter)
-			require.NoError(t, err)
-			assert.Equal(t, *v.Delta, tt.want)
-		})
-	}
-}
-
-func TestMemStorage_GetGauge(t *testing.T) {
 	var testGauge float64 = 100
+	testMetrics := []common.Metrics{
+		{ID: "foo", MType: common.MetricGauge, Value: &testGauge},
+		{ID: "bar", MType: common.MetricCounter, Delta: &testCounter},
+	}
 
 	tests := []struct {
 		name      string
-		setName   string
-		getName   string
-		value     common.Gauge
+		metrics   []common.Metrics
+		mID       string
+		mType     string
+		wantValue float64
+		wantDelta int64
 		wantError error
 	}{
 		{
-			name:      "get right value",
-			setName:   "foo",
-			getName:   "foo",
-			value:     common.Gauge(testGauge),
-			wantError: nil,
+			name:      "get gauge",
+			mID:       "foo",
+			mType:     common.MetricGauge,
+			wantValue: testGauge,
 		},
 		{
-			name:      "get wrong value",
-			setName:   "foo",
-			getName:   "bar",
-			value:     common.Gauge(testGauge),
-			wantError: common.ErrWrongMetricsName,
+			name:      "get counter",
+			mID:       "bar",
+			mType:     common.MetricCounter,
+			wantDelta: testCounter,
 		},
+		{
+			name:      "get wrong metric id",
+			mID:       "buz",
+			mType:     common.MetricGauge,
+			wantError: common.ErrWrongMetricsID,
+		},
+		{
+			name:      "get wrong metric type",
+			mID:       "foo",
+			mType:     "buz",
+			wantError: common.ErrWrongMetricsType,
+		},
+	}
+	strg := NewMemStorage()
+	for _, v := range testMetrics {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := strg.AddMetric(ctx, &v)
+		cancel()
+		require.NoError(t, err)
 	}
 	for _, tt := range tests {
-		strg := NewMemStorage()
 		t.Run(tt.name, func(t *testing.T) {
-			strg.AddGauge(tt.setName, tt.value)
-			_, err := strg.GetMetric(tt.getName, common.MetricGauge)
-			if tt.wantError == nil {
-				assert.NoError(t, err)
-			} else {
-				assert.Error(t, err, tt.wantError)
-			}
-		})
-	}
-}
-
-func TestMemStorage_GetCounter(t *testing.T) {
-	var testCounter int64 = 100
-
-	tests := []struct {
-		name      string
-		setName   string
-		getName   string
-		value     common.Counter
-		wantError error
-	}{
-		{
-			name:      "get right value",
-			setName:   "foo",
-			getName:   "foo",
-			value:     common.Counter(testCounter),
-			wantError: nil,
-		},
-		{
-			name:      "get wrong value",
-			setName:   "foo",
-			getName:   "bar",
-			value:     common.Counter(testCounter),
-			wantError: common.ErrWrongMetricsName,
-		},
-	}
-	for _, tt := range tests {
-		strg := NewMemStorage()
-		t.Run(tt.name, func(t *testing.T) {
-			strg.AddCounter(tt.setName, tt.value)
-			_, err := strg.GetMetric(tt.getName, common.MetricCounter)
-			if tt.wantError == nil {
-				assert.NoError(t, err)
-			} else {
-				assert.Error(t, err, tt.wantError)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			m, err := strg.GetMetric(ctx, tt.mID, tt.mType)
+			cancel()
+			if tt.wantError != nil {
+				assert.ErrorIs(t, err, tt.wantError)
+			} else if tt.wantValue != 0 {
+				assert.Equal(t, tt.wantValue, *m.Value)
+			} else if tt.wantDelta != 0 {
+				assert.Equal(t, tt.wantDelta, *m.Delta)
 			}
 		})
 	}
@@ -146,40 +107,35 @@ func TestMemStorage_GetMetrics(t *testing.T) {
 	var testCounter int64 = 100
 	var testGauge float64 = 100
 
-	type fields struct {
-		gauge   map[string]common.Gauge
-		counter map[string]common.Counter
-	}
 	tests := []struct {
-		name   string
-		fields fields
-		want   int
+		name      string
+		metrics   []common.Metrics
+		wantCount int
 	}{
 		{
 			name: "get metrics",
-			fields: fields{
-				gauge: map[string]common.Gauge{
-					"foo": common.Gauge(testGauge),
-					"bar": common.Gauge(testGauge),
-				},
-				counter: map[string]common.Counter{
-					"buz": common.Counter(testCounter),
-				},
+			metrics: []common.Metrics{
+				{ID: "foo", MType: common.MetricGauge, Value: &testGauge},
+				{ID: "bar", MType: common.MetricGauge, Value: &testGauge},
+				{ID: "buz", MType: common.MetricCounter, Delta: &testCounter},
 			},
-			want: 3,
+			wantCount: 3,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			strg := NewMemStorage()
-			for k, v := range tt.fields.counter {
-				strg.AddCounter(k, common.Counter(v))
+			for _, v := range tt.metrics {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				err := strg.AddMetric(ctx, &v)
+				cancel()
+				require.NoError(t, err)
 			}
-			for k, v := range tt.fields.gauge {
-				strg.AddGauge(k, common.Gauge(v))
-			}
-			metrics := strg.GetMetrics()
-			assert.Equal(t, tt.want, len(metrics))
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			metrics, err := strg.GetMetrics(ctx)
+			cancel()
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantCount, len(metrics))
 		})
 	}
 }

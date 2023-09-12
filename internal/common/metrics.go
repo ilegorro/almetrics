@@ -1,9 +1,9 @@
 package common
 
-import "fmt"
-
-type Gauge float64
-type Counter int64
+import (
+	"context"
+	"fmt"
+)
 
 const (
 	MetricGauge   string = "gauge"
@@ -11,11 +11,10 @@ const (
 )
 
 type Repository interface {
-	AddGauge(string, Gauge)
-	AddCounter(string, Counter)
-	AddMetric(*Metrics)
-	GetMetric(string, string) (*Metrics, error)
-	GetMetrics() []Metrics
+	AddMetric(context.Context, *Metrics) error
+	AddMetrics(context.Context, []Metrics) error
+	GetMetric(context.Context, string, string) (*Metrics, error)
+	GetMetrics(context.Context) ([]Metrics, error)
 }
 
 type Metrics struct {

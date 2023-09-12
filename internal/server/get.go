@@ -1,16 +1,20 @@
-package handlers
+package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"html/template"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ilegorro/almetrics/internal/common"
 )
 
-func (hctx *HandlerContext) GetRootHandler(w http.ResponseWriter, r *http.Request) {
+func (app *App) GetRootHandler(w http.ResponseWriter, r *http.Request) {
 	respHTML := `
 		<html>
 			<head>
@@ -29,31 +33,42 @@ func (hctx *HandlerContext) GetRootHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html;charset=utf-8")
-	w.WriteHeader(http.StatusOK)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	metrics, err := app.strg.GetMetrics(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	data := make(map[string]string, 0)
-	for _, v := range hctx.strg.GetMetrics() {
+	for _, v := range metrics {
 		data[v.ID] = v.StringValue()
 	}
+
+	w.Header().Set("Content-Type", "text/html;charset=utf-8")
+	w.WriteHeader(http.StatusOK)
 	if err = tmpl.Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
-func (hctx *HandlerContext) GetValueHandler(w http.ResponseWriter, r *http.Request) {
+func (app *App) GetValueHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 
-	v, err := hctx.strg.GetMetric(mName, mType)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	v, err := app.strg.GetMetric(ctx, mName, mType)
 	if err != nil {
-		switch err {
-		case common.ErrWrongMetricsName:
+		if errors.Is(err, common.ErrWrongMetricsID) {
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case common.ErrWrongMetricsType:
+		} else if errors.Is(err, common.ErrWrongMetricsType) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		default:
-			http.Error(w, "error getting metric", http.StatusInternalServerError)
+		} else {
+			http.Error(w, fmt.Sprintf("error getting metric: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}
@@ -62,7 +77,7 @@ func (hctx *HandlerContext) GetValueHandler(w http.ResponseWriter, r *http.Reque
 	w.Write([]byte(v.StringValue()))
 }
 
-func (hctx *HandlerContext) GetValueJSONHandler(w http.ResponseWriter, r *http.Request) {
+func (app *App) GetValueJSONHandler(w http.ResponseWriter, r *http.Request) {
 
 	var data common.Metrics
 	var buf bytes.Buffer
@@ -78,15 +93,16 @@ func (hctx *HandlerContext) GetValueJSONHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	v, err := hctx.strg.GetMetric(data.ID, data.MType)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	v, err := app.strg.GetMetric(ctx, data.ID, data.MType)
 	if err != nil {
-		switch err {
-		case common.ErrWrongMetricsName:
+		if errors.Is(err, common.ErrWrongMetricsID) {
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case common.ErrWrongMetricsType:
+		} else if errors.Is(err, common.ErrWrongMetricsType) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		default:
-			http.Error(w, "error getting metric", http.StatusInternalServerError)
+		} else {
+			http.Error(w, fmt.Sprintf("error getting metric: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}

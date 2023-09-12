@@ -1,6 +1,7 @@
 package filestorage
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -26,11 +27,11 @@ func RestoreMetrics(m common.Repository, op *Options) error {
 		return err
 	}
 	for _, v := range metrics {
-		switch v.MType {
-		case common.MetricGauge:
-			m.AddGauge(v.ID, common.Gauge(*v.Value))
-		case common.MetricCounter:
-			m.AddCounter(v.ID, common.Counter(*v.Delta))
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		err := m.AddMetric(ctx, &v)
+		cancel()
+		if err != nil {
+			return err
 		}
 	}
 
@@ -38,7 +39,12 @@ func RestoreMetrics(m common.Repository, op *Options) error {
 }
 
 func SaveMetrics(m common.Repository, op *Options) error {
-	metrics := m.GetMetrics()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	metrics, err := m.GetMetrics(ctx)
+	if err != nil {
+		return err
+	}
 	data, err := json.Marshal(metrics)
 	if err != nil {
 		return err

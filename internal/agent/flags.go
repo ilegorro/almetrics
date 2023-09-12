@@ -24,7 +24,7 @@ type Options struct {
 }
 
 func (op *Options) GetReportURL() string {
-	return fmt.Sprintf("http://%v:%v/update/", op.ReportHost, op.ReportPort)
+	return fmt.Sprintf("http://%v:%v/updates/", op.ReportHost, op.ReportPort)
 }
 
 func getAddressParts(s string) (string, string, error) {
@@ -33,11 +33,13 @@ func getAddressParts(s string) (string, string, error) {
 		s = "https://" + s
 	}
 	u, err := url.Parse(s)
-	if err == nil {
-		host = u.Hostname()
-		port = u.Port()
+	if err != nil {
+		return "", "", fmt.Errorf("get address parts: %w", err)
 	}
-	return host, port, err
+	host = u.Hostname()
+	port = u.Port()
+
+	return host, port, nil
 }
 
 func ParseFlags() *Options {
@@ -58,7 +60,7 @@ func ParseFlags() *Options {
 	flag.Func("a", "host and port (default localhost:8080)", func(flagValue string) error {
 		op.ReportHost, op.ReportPort, err = getAddressParts(flagValue)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse a flag: %w", err)
 		}
 		return nil
 	})
