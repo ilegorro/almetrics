@@ -11,6 +11,7 @@ import (
 	"github.com/ilegorro/almetrics/internal/server"
 	"github.com/ilegorro/almetrics/internal/server/adapters/db"
 	"github.com/ilegorro/almetrics/internal/server/config"
+	"github.com/ilegorro/almetrics/internal/server/handlers"
 	"github.com/ilegorro/almetrics/internal/storage"
 )
 
@@ -43,8 +44,8 @@ func main() {
 	}
 
 	app := server.NewApp(strg, op)
-	router := server.MetricsRouter(app)
-	endPoint := op.EndpointURL
+	router := handlers.MetricsRouter(app)
+	endPoint := op.Endpoint.URL()
 
 	if err := http.ListenAndServe(endPoint, router); err != http.ErrServerClosed {
 		logger.Fatalln(err)

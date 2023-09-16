@@ -1,4 +1,4 @@
-package server
+package handlers
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/ilegorro/almetrics/internal/common"
 	"github.com/ilegorro/almetrics/internal/middleware"
+	"github.com/ilegorro/almetrics/internal/server"
 	"github.com/ilegorro/almetrics/internal/server/config"
 	"github.com/ilegorro/almetrics/internal/storage"
 	"github.com/stretchr/testify/assert"
@@ -66,9 +67,9 @@ func TestGetValueJSONHandler(t *testing.T) {
 
 	strg := storage.NewMemStorage()
 	op := config.EmptyOptions()
-	app := NewApp(strg, op)
-	updateHandler := http.HandlerFunc(app.UpdateJSONHandler)
-	valueHandler := http.HandlerFunc(app.GetValueJSONHandler)
+	app := server.NewApp(strg, op)
+	updateHandler := http.HandlerFunc(UpdateJSONHandler(app))
+	valueHandler := http.HandlerFunc(GetValueJSONHandler(app))
 	mux := http.NewServeMux()
 	mux.Handle("/update/", middleware.WithCompression(updateHandler))
 	mux.Handle("/value/", middleware.WithCompression(valueHandler))

@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/caarlos0/env/v6"
@@ -12,25 +11,10 @@ import (
 )
 
 type config struct {
-	Address         string `env:"ADDRESS"`
-	StorageInterval int    `env:"STORE_INTERVAL"`
-	StoragePath     string `env:"FILE_STORAGE_PATH"`
-	StorageRestore  bool   `env:"RESTORE"`
-	DBDSN           string `env:"DATABASE_DSN"`
-	Key             string `env:"KEY"`
-}
-
-type Options struct {
-	Endpoint *Endpoint
-	Storage  *Storage
-	DBDSN    string
-	Key      string
-}
-
-type Storage struct {
-	Interval int
-	Path     string
-	Restore  bool
+	Address        string `env:"ADDRESS"`
+	ReportInterval int    `env:"REPORT_INTERVAL"`
+	PollInterval   int    `env:"POLL_INTERVAL"`
+	Key            string `env:"KEY"`
 }
 
 type Endpoint struct {
@@ -39,13 +23,19 @@ type Endpoint struct {
 }
 
 func (e *Endpoint) URL() string {
-	return fmt.Sprintf("%v:%v", e.Hostname, e.Port)
+	return fmt.Sprintf("http://%v:%v/updates/", e.Hostname, e.Port)
+}
+
+type Options struct {
+	Endpoint       *Endpoint
+	PollInterval   int
+	ReportInterval int
+	Key            string
 }
 
 func EmptyOptions() *Options {
 	return &Options{
 		Endpoint: &Endpoint{},
-		Storage:  &Storage{},
 	}
 }
 
@@ -61,25 +51,17 @@ func ReadOptions() *Options {
 		logger.Errorf("error parsing environment variables: %+v", err)
 	}
 
-	if cfg.StoragePath != "" {
-		op.Storage.Path = cfg.StoragePath
+	if cfg.PollInterval != 0 {
+		op.PollInterval = cfg.PollInterval
 	}
-	if cfg.StorageInterval != 0 {
-		op.Storage.Interval = cfg.StorageInterval
+	if cfg.ReportInterval != 0 {
+		op.ReportInterval = cfg.ReportInterval
 	}
-	_, ok := os.LookupEnv("RESTORE")
-	if ok {
-		op.Storage.Restore = cfg.StorageRestore
-	}
-
 	if cfg.Address != "" {
 		op.Endpoint, err = getEndpoint(cfg.Address)
 		if err != nil {
 			logger.Fatalf("error parsing hostname and port: %+v", err)
 		}
-	}
-	if cfg.DBDSN != "" {
-		op.DBDSN = cfg.DBDSN
 	}
 	if cfg.Key != "" {
 		op.Key = cfg.Key
@@ -96,10 +78,8 @@ func readEnv() (config, error) {
 }
 
 func parseFlags(op *Options) {
-	flag.IntVar(&op.Storage.Interval, "i", 300, "store interval")
-	flag.BoolVar(&op.Storage.Restore, "r", true, "restore from storage")
-	flag.StringVar(&op.Storage.Path, "f", "/tmp/metrics-db.json", "file storage path")
-	flag.StringVar(&op.DBDSN, "d", "", "db DSN")
+	flag.IntVar(&op.PollInterval, "p", 2, "poll interval")
+	flag.IntVar(&op.ReportInterval, "r", 10, "report interval")
 	flag.StringVar(&op.Key, "k", "", "hash key")
 	flag.Func("a", "host and port (default localhost:8080)", func(flagValue string) error {
 		v, err := getEndpoint(flagValue)

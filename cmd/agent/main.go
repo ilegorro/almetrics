@@ -6,35 +6,36 @@ import (
 	"time"
 
 	"github.com/ilegorro/almetrics/internal/agent"
+	"github.com/ilegorro/almetrics/internal/agent/config"
 )
 
 func main() {
 	var wg sync.WaitGroup
 	wg.Add(2)
-	op := agent.ParseFlags()
+	op := config.ReadOptions()
 
-	app := agent.NewApp()
-	go poll(app, op, &wg)
-	go report(app, op, &wg)
+	app := agent.NewApp(op)
+	go poll(app, &wg)
+	go report(app, &wg)
 
 	wg.Wait()
 }
 
-func poll(app *agent.App, op *agent.Options, wg *sync.WaitGroup) {
+func poll(app *agent.App, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
 		app.Poll()
-		time.Sleep(time.Duration(op.PollInterval) * time.Second)
+		time.Sleep(time.Duration(app.Options.PollInterval) * time.Second)
 	}
 }
 
-func report(app *agent.App, op *agent.Options, wg *sync.WaitGroup) {
+func report(app *agent.App, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
-		err := app.Report(op.GetReportURL())
+		err := app.Report()
 		if err != nil {
 			fmt.Println(err)
 		}
-		time.Sleep(time.Duration(op.ReportInterval) * time.Second)
+		time.Sleep(time.Duration(app.Options.ReportInterval) * time.Second)
 	}
 }

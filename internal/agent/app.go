@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -12,17 +15,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ilegorro/almetrics/internal/agent/config"
 	"github.com/ilegorro/almetrics/internal/common"
 	"golang.org/x/exp/slices"
 )
 
 type App struct {
 	mutex   sync.Mutex
+	Options *config.Options
 	metrics []common.Metrics
 }
 
-func NewApp() *App {
-	return &App{}
+func NewApp(op *config.Options) *App {
+	return &App{Options: op}
 }
 
 func (app *App) Poll() {
@@ -93,7 +98,7 @@ func getGaugeMetric(id string, val interface{}) common.Metrics {
 	return common.Metrics{ID: id, MType: common.MetricGauge, Value: &mVal}
 }
 
-func (app *App) Report(url string) error {
+func (app *App) Report() error {
 	app.mutex.Lock()
 	defer app.mutex.Unlock()
 
@@ -118,13 +123,14 @@ func (app *App) Report(url string) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	r, err := http.NewRequestWithContext(ctx, http.MethodPost, url, buf)
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost, app.Options.Endpoint.URL(), buf)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
 	r.Header.Set("Accept-Encoding", "gzip")
 	r.Header.Set("Content-Encoding", "gzip")
 	r.Header.Set("Content-Type", "application/json")
+	setHashHeader(app, r, buf)
 
 	resp, err := common.WithRetryDo(http.DefaultClient.Do, r)
 	if err != nil {
@@ -135,4 +141,13 @@ func (app *App) Report(url string) error {
 	app.metrics = nil
 
 	return nil
+}
+
+func setHashHeader(app *App, r *http.Request, buf *bytes.Buffer) {
+	key := app.Options.Key
+	if key != "" {
+		h := hmac.New(sha256.New, []byte(key))
+		h.Write(buf.Bytes())
+		r.Header.Set("HashSHA256", hex.EncodeToString(h.Sum(nil)))
+	}
 }

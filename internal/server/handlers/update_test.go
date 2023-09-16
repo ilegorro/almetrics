@@ -1,4 +1,4 @@
-package server
+package handlers
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ilegorro/almetrics/internal/server"
 	"github.com/ilegorro/almetrics/internal/server/config"
 	"github.com/ilegorro/almetrics/internal/storage"
 	"github.com/stretchr/testify/assert"
@@ -86,8 +87,8 @@ func TestUpdateHandler(t *testing.T) {
 
 			strg := storage.NewMemStorage()
 			op := config.EmptyOptions()
-			app := NewApp(strg, op)
-			h := http.HandlerFunc(app.UpdateHandler)
+			app := server.NewApp(strg, op)
+			h := http.HandlerFunc(UpdateHandler(app))
 			h(w, r)
 			cancel()
 
@@ -147,8 +148,8 @@ func TestUpdateJSONHandler(t *testing.T) {
 
 			strg := storage.NewMemStorage()
 			op := config.EmptyOptions()
-			app := NewApp(strg, op)
-			h := http.HandlerFunc(app.UpdateJSONHandler)
+			app := server.NewApp(strg, op)
+			h := http.HandlerFunc(UpdateJSONHandler(app))
 			h(w, r)
 			cancel()
 			result := w.Result()
