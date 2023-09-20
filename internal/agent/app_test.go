@@ -26,7 +26,7 @@ func TestMetrics_Report(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
-			app.Poll()
+			app.PollMemStats()
 			u, err := url.Parse(srv.URL)
 			require.NoError(t, err)
 			if err == nil {
@@ -52,7 +52,7 @@ func TestMetrics_Poll(t *testing.T) {
 	app := NewApp(op)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app.Poll()
+			app.PollMemStats()
 			assert.NotEmpty(t, app.metrics)
 		})
 	}

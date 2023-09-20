@@ -17,20 +17,46 @@ import (
 
 	"github.com/ilegorro/almetrics/internal/agent/config"
 	"github.com/ilegorro/almetrics/internal/common"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
 	"golang.org/x/exp/slices"
+	"golang.org/x/sync/errgroup"
 )
 
 type App struct {
-	mutex   sync.Mutex
-	Options *config.Options
-	metrics []common.Metrics
+	mutex         sync.Mutex
+	Options       *config.Options
+	metrics       []common.Metrics
+	psutilMetrics []common.Metrics
 }
 
 func NewApp(op *config.Options) *App {
 	return &App{Options: op}
 }
 
-func (app *App) Poll() {
+func (app *App) PollCPUmem() error {
+	app.mutex.Lock()
+	defer app.mutex.Unlock()
+
+	app.psutilMetrics = nil
+
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		return fmt.Errorf("error getting mem metrics: %w", err)
+	}
+	app.psutilMetrics = append(app.psutilMetrics, getGaugeMetric("TotalMemory", v.Total))
+	app.psutilMetrics = append(app.psutilMetrics, getGaugeMetric("FreeMemory", v.Free))
+
+	c, err := cpu.Percent(0, false)
+	if err != nil {
+		return fmt.Errorf("error getting cpu metrics: %w", err)
+	}
+	app.psutilMetrics = append(app.psutilMetrics, getGaugeMetric("CPUutilization1", c))
+
+	return nil
+}
+
+func (app *App) PollMemStats() {
 	app.mutex.Lock()
 	defer app.mutex.Unlock()
 
@@ -102,43 +128,77 @@ func (app *App) Report() error {
 	app.mutex.Lock()
 	defer app.mutex.Unlock()
 
-	if len(app.metrics) == 0 {
+	if len(app.metrics) == 0 && len(app.psutilMetrics) == 0 {
 		return nil
 	}
 
-	dataJSON, err := json.Marshal(app.metrics)
-	if err != nil {
-		return fmt.Errorf("marshal report: %w", err)
-	}
+	metrics := make([]common.Metrics, 0)
+	metrics = append(metrics, app.metrics...)
+	metrics = append(metrics, app.psutilMetrics...)
 
-	buf := bytes.NewBuffer(nil)
-	zb := gzip.NewWriter(buf)
-	_, err = zb.Write([]byte(dataJSON))
-	if err != nil {
-		return fmt.Errorf("compress report: %w", err)
+	jobs := make(chan common.Metrics, len(metrics))
+	for _, m := range metrics {
+		jobs <- m
 	}
-	if err = zb.Close(); err != nil {
-		return fmt.Errorf("close gzip: %w", err)
-	}
+	close(jobs)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	r, err := http.NewRequestWithContext(ctx, http.MethodPost, app.Options.Endpoint.URL(), buf)
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
-	}
-	r.Header.Set("Accept-Encoding", "gzip")
-	r.Header.Set("Content-Encoding", "gzip")
-	r.Header.Set("Content-Type", "application/json")
-	setHashHeader(app, r, buf)
+	g := new(errgroup.Group)
+	for w := 1; w <= app.Options.RateLimit; w++ {
+		g.Go(func() error {
+			err := reportWorker(app, jobs)
+			if err != nil {
+				return err
+			}
 
-	resp, err := common.WithRetryDo(http.DefaultClient.Do, r)
-	if err != nil {
-		return fmt.Errorf("perform request: %w", err)
+			return nil
+		})
 	}
-	resp.Body.Close()
+	if err := g.Wait(); err != nil {
+		return err
+	}
 
 	app.metrics = nil
+	app.psutilMetrics = nil
+
+	return nil
+}
+
+func reportWorker(app *App, jobs <-chan common.Metrics) error {
+	for m := range jobs {
+		dataJSON, err := json.Marshal(m)
+		if err != nil {
+			return fmt.Errorf("marshal report: %w", err)
+		}
+
+		buf := bytes.NewBuffer(nil)
+		zb := gzip.NewWriter(buf)
+		_, err = zb.Write([]byte(dataJSON))
+		if err != nil {
+			return fmt.Errorf("compress report: %w", err)
+		}
+		if err = zb.Close(); err != nil {
+			return fmt.Errorf("close gzip: %w", err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		r, err := http.NewRequestWithContext(ctx, http.MethodPost, app.Options.Endpoint.URL(), buf)
+		if err != nil {
+			cancel()
+			return fmt.Errorf("create request: %w", err)
+		}
+		r.Header.Set("Accept-Encoding", "gzip")
+		r.Header.Set("Content-Encoding", "gzip")
+		r.Header.Set("Content-Type", "application/json")
+		setHashHeader(app, r, buf)
+
+		resp, err := common.WithRetryDo(http.DefaultClient.Do, r)
+		if err != nil {
+			cancel()
+			return fmt.Errorf("perform request: %w", err)
+		}
+		resp.Body.Close()
+		cancel()
+	}
 
 	return nil
 }

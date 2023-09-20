@@ -15,6 +15,7 @@ type config struct {
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
 	Key            string `env:"KEY"`
+	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
 type Endpoint struct {
@@ -23,7 +24,7 @@ type Endpoint struct {
 }
 
 func (e *Endpoint) URL() string {
-	return fmt.Sprintf("http://%v:%v/updates/", e.Hostname, e.Port)
+	return fmt.Sprintf("http://%v:%v/update/", e.Hostname, e.Port)
 }
 
 type Options struct {
@@ -31,6 +32,7 @@ type Options struct {
 	PollInterval   int
 	ReportInterval int
 	Key            string
+	RateLimit      int
 }
 
 func EmptyOptions() *Options {
@@ -66,6 +68,9 @@ func ReadOptions() *Options {
 	if cfg.Key != "" {
 		op.Key = cfg.Key
 	}
+	if cfg.RateLimit != 0 {
+		op.RateLimit = cfg.RateLimit
+	}
 
 	return op
 }
@@ -80,6 +85,7 @@ func readEnv() (config, error) {
 func parseFlags(op *Options) {
 	flag.IntVar(&op.PollInterval, "p", 2, "poll interval")
 	flag.IntVar(&op.ReportInterval, "r", 10, "report interval")
+	flag.IntVar(&op.RateLimit, "l", 3, "rate limit")
 	flag.StringVar(&op.Key, "k", "", "hash key")
 	flag.Func("a", "host and port (default localhost:8080)", func(flagValue string) error {
 		v, err := getEndpoint(flagValue)

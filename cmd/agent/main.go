@@ -11,20 +11,32 @@ import (
 
 func main() {
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	op := config.ReadOptions()
 
 	app := agent.NewApp(op)
-	go poll(app, &wg)
+	go pollCPUmem(app, &wg)
+	go pollMemStats(app, &wg)
 	go report(app, &wg)
 
 	wg.Wait()
 }
 
-func poll(app *agent.App, wg *sync.WaitGroup) {
+func pollCPUmem(app *agent.App, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
-		app.Poll()
+		err := app.PollCPUmem()
+		if err != nil {
+			fmt.Println(err)
+		}
+		time.Sleep(time.Duration(app.Options.PollInterval) * time.Second)
+	}
+}
+
+func pollMemStats(app *agent.App, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for {
+		app.PollMemStats()
 		time.Sleep(time.Duration(app.Options.PollInterval) * time.Second)
 	}
 }
