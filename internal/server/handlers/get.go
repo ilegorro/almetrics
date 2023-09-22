@@ -36,7 +36,7 @@ func GetRootHandler(app *server.App) func(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		metrics, err := app.Strg.GetMetrics(ctx)
 		if err != nil {
@@ -63,7 +63,7 @@ func GetValueHandler(app *server.App) func(w http.ResponseWriter, r *http.Reques
 		mType := chi.URLParam(r, "mType")
 		mName := chi.URLParam(r, "mName")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		v, err := app.Strg.GetMetric(ctx, mName, mType)
 		if err != nil {
@@ -98,7 +98,7 @@ func GetValueJSONHandler(app *server.App) func(w http.ResponseWriter, r *http.Re
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		v, err := app.Strg.GetMetric(ctx, data.ID, data.MType)
 		if err != nil {

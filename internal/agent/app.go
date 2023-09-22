@@ -34,7 +34,7 @@ func NewApp(op *config.Options) *App {
 	return &App{Options: op}
 }
 
-func (app *App) PollCPUmem() error {
+func (app *App) PollCPUmem(ctx context.Context) error {
 	app.mutex.Lock()
 	defer app.mutex.Unlock()
 
@@ -56,7 +56,7 @@ func (app *App) PollCPUmem() error {
 	return nil
 }
 
-func (app *App) PollMemStats() {
+func (app *App) PollMemStats(ctx context.Context) {
 	app.mutex.Lock()
 	defer app.mutex.Unlock()
 
@@ -124,7 +124,7 @@ func getGaugeMetric(id string, val interface{}) common.Metrics {
 	return common.Metrics{ID: id, MType: common.MetricGauge, Value: &mVal}
 }
 
-func (app *App) Report() error {
+func (app *App) Report(ctx context.Context) error {
 	app.mutex.Lock()
 	defer app.mutex.Unlock()
 
@@ -132,20 +132,11 @@ func (app *App) Report() error {
 		return nil
 	}
 
-	metrics := make([]common.Metrics, 0)
-	metrics = append(metrics, app.metrics...)
-	metrics = append(metrics, app.psutilMetrics...)
-
-	jobs := make(chan common.Metrics, len(metrics))
-	for _, m := range metrics {
-		jobs <- m
-	}
-	close(jobs)
-
+	jobs := make(chan common.Metrics)
 	g := new(errgroup.Group)
 	for w := 1; w <= app.Options.RateLimit; w++ {
 		g.Go(func() error {
-			err := reportWorker(app, jobs)
+			err := reportWorker(ctx, app, jobs)
 			if err != nil {
 				return err
 			}
@@ -153,6 +144,15 @@ func (app *App) Report() error {
 			return nil
 		})
 	}
+
+	metrics := make([]common.Metrics, 0)
+	metrics = append(metrics, app.metrics...)
+	metrics = append(metrics, app.psutilMetrics...)
+	for _, m := range metrics {
+		jobs <- m
+	}
+	close(jobs)
+
 	if err := g.Wait(); err != nil {
 		return err
 	}
@@ -163,44 +163,50 @@ func (app *App) Report() error {
 	return nil
 }
 
-func reportWorker(app *App, jobs <-chan common.Metrics) error {
-	for m := range jobs {
-		dataJSON, err := json.Marshal(m)
-		if err != nil {
-			return fmt.Errorf("marshal report: %w", err)
-		}
+func reportWorker(ctx context.Context, app *App, jobs <-chan common.Metrics) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case m, ok := <-jobs:
+			if !ok {
+				return nil
+			}
+			dataJSON, err := json.Marshal(m)
+			if err != nil {
+				return fmt.Errorf("marshal report: %w", err)
+			}
 
-		buf := bytes.NewBuffer(nil)
-		zb := gzip.NewWriter(buf)
-		_, err = zb.Write([]byte(dataJSON))
-		if err != nil {
-			return fmt.Errorf("compress report: %w", err)
-		}
-		if err = zb.Close(); err != nil {
-			return fmt.Errorf("close gzip: %w", err)
-		}
+			buf := bytes.NewBuffer(nil)
+			zb := gzip.NewWriter(buf)
+			_, err = zb.Write([]byte(dataJSON))
+			if err != nil {
+				return fmt.Errorf("compress report: %w", err)
+			}
+			if err = zb.Close(); err != nil {
+				return fmt.Errorf("close gzip: %w", err)
+			}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		r, err := http.NewRequestWithContext(ctx, http.MethodPost, app.Options.Endpoint.URL(), buf)
-		if err != nil {
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			r, err := http.NewRequestWithContext(ctx, http.MethodPost, app.Options.Endpoint.URL(), buf)
+			if err != nil {
+				cancel()
+				return fmt.Errorf("create request: %w", err)
+			}
+			r.Header.Set("Accept-Encoding", "gzip")
+			r.Header.Set("Content-Encoding", "gzip")
+			r.Header.Set("Content-Type", "application/json")
+			setHashHeader(app, r, buf)
+
+			resp, err := common.WithRetryDo(http.DefaultClient.Do, r)
+			if err != nil {
+				cancel()
+				return fmt.Errorf("perform request: %w", err)
+			}
+			resp.Body.Close()
 			cancel()
-			return fmt.Errorf("create request: %w", err)
 		}
-		r.Header.Set("Accept-Encoding", "gzip")
-		r.Header.Set("Content-Encoding", "gzip")
-		r.Header.Set("Content-Type", "application/json")
-		setHashHeader(app, r, buf)
-
-		resp, err := common.WithRetryDo(http.DefaultClient.Do, r)
-		if err != nil {
-			cancel()
-			return fmt.Errorf("perform request: %w", err)
-		}
-		resp.Body.Close()
-		cancel()
 	}
-
-	return nil
 }
 
 func setHashHeader(app *App, r *http.Request, buf *bytes.Buffer) {

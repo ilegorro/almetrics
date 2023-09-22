@@ -42,7 +42,7 @@ func UpdateHandler(app *server.App) func(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		err := app.Strg.AddMetric(ctx, &metrics)
 		if err != nil {
@@ -52,7 +52,7 @@ func UpdateHandler(app *server.App) func(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusOK)
 		if app.SyncFileStorage {
 			sop := filestorage.Options{StoragePath: app.Options.Storage.Path}
-			err := filestorage.SaveMetrics(app.Strg, &sop)
+			err := filestorage.SaveMetrics(r.Context(), app.Strg, &sop)
 			if err != nil {
 				common.SugaredLogger().Errorf("Error saving metrics: %v", err)
 			}
@@ -76,14 +76,14 @@ func UpdateJSONHandler(app *server.App) func(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		err = app.Strg.AddMetric(ctx, &data)
 		cancel()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel = context.WithTimeout(r.Context(), 10*time.Second)
 		v, err := app.Strg.GetMetric(ctx, data.ID, data.MType)
 		cancel()
 
@@ -109,7 +109,7 @@ func UpdateJSONHandler(app *server.App) func(w http.ResponseWriter, r *http.Requ
 		w.Write([]byte(respJSON))
 		if app.SyncFileStorage {
 			sop := filestorage.Options{StoragePath: app.Options.Storage.Path}
-			err := filestorage.SaveMetrics(app.Strg, &sop)
+			err := filestorage.SaveMetrics(r.Context(), app.Strg, &sop)
 			if err != nil {
 				common.SugaredLogger().Errorf("Error saving metrics: %v", err)
 			}

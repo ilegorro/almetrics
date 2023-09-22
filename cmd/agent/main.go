@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"sync"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/ilegorro/almetrics/internal/agent"
@@ -10,22 +13,23 @@ import (
 )
 
 func main() {
-	var wg sync.WaitGroup
-	wg.Add(3)
 	op := config.ReadOptions()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	app := agent.NewApp(op)
-	go pollCPUmem(app, &wg)
-	go pollMemStats(app, &wg)
-	go report(app, &wg)
+	go pollCPUmem(ctx, app)
+	go pollMemStats(ctx, app)
+	go report(ctx, app)
 
-	wg.Wait()
+	termChan := make(chan os.Signal, 1)
+	signal.Notify(termChan, syscall.SIGINT, syscall.SIGTERM)
+	<-termChan
 }
 
-func pollCPUmem(app *agent.App, wg *sync.WaitGroup) {
-	defer wg.Done()
+func pollCPUmem(ctx context.Context, app *agent.App) {
 	for {
-		err := app.PollCPUmem()
+		err := app.PollCPUmem(ctx)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -33,18 +37,16 @@ func pollCPUmem(app *agent.App, wg *sync.WaitGroup) {
 	}
 }
 
-func pollMemStats(app *agent.App, wg *sync.WaitGroup) {
-	defer wg.Done()
+func pollMemStats(ctx context.Context, app *agent.App) {
 	for {
-		app.PollMemStats()
+		app.PollMemStats(ctx)
 		time.Sleep(time.Duration(app.Options.PollInterval) * time.Second)
 	}
 }
 
-func report(app *agent.App, wg *sync.WaitGroup) {
-	defer wg.Done()
+func report(ctx context.Context, app *agent.App) {
 	for {
-		err := app.Report()
+		err := app.Report(ctx)
 		if err != nil {
 			fmt.Println(err)
 		}

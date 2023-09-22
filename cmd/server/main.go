@@ -19,6 +19,7 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	logger := common.SugaredLogger()
+	ctx := context.Background()
 
 	op := config.ReadOptions()
 
@@ -29,7 +30,7 @@ func main() {
 
 	if op.Storage.Restore {
 		sop := filestorage.Options{StoragePath: op.Storage.Path}
-		err := filestorage.RestoreMetrics(strg, &sop)
+		err := filestorage.RestoreMetrics(ctx, strg, &sop)
 		if err != nil {
 			logger.Errorf("unable to restore metrics: %v", err)
 		}
@@ -40,7 +41,7 @@ func main() {
 			StoragePath:     op.Storage.Path,
 			StorageInterval: op.Storage.Interval,
 		}
-		go filestorage.SaveMetricsInterval(strg, &sop, &wg)
+		go filestorage.SaveMetricsInterval(ctx, strg, &sop, &wg)
 	}
 
 	app := server.NewApp(strg, op)

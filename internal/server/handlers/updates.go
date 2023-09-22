@@ -28,7 +28,7 @@ func UpdatesHandler(app *server.App) func(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		err = app.Strg.AddMetrics(ctx, data)
 		cancel()
 		if err != nil {
@@ -38,7 +38,7 @@ func UpdatesHandler(app *server.App) func(w http.ResponseWriter, r *http.Request
 		w.WriteHeader(http.StatusOK)
 		if app.SyncFileStorage {
 			sop := filestorage.Options{StoragePath: app.Options.Storage.Path}
-			err := filestorage.SaveMetrics(app.Strg, &sop)
+			err := filestorage.SaveMetrics(r.Context(), app.Strg, &sop)
 			if err != nil {
 				common.SugaredLogger().Errorf("Error saving metrics: %v", err)
 			}

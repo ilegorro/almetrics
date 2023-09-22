@@ -37,7 +37,8 @@ type Options struct {
 
 func EmptyOptions() *Options {
 	return &Options{
-		Endpoint: &Endpoint{},
+		Endpoint:  &Endpoint{},
+		RateLimit: 1,
 	}
 }
 
