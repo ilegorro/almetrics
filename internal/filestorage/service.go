@@ -17,7 +17,7 @@ type Options struct {
 	StorageInterval int
 }
 
-func RestoreMetrics(m common.Repository, op *Options) error {
+func RestoreMetrics(ctx context.Context, m common.Repository, op *Options) error {
 	data, err := os.ReadFile(op.StoragePath)
 	if err != nil {
 		return err
@@ -27,7 +27,7 @@ func RestoreMetrics(m common.Repository, op *Options) error {
 		return err
 	}
 	for _, v := range metrics {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 		err := m.AddMetric(ctx, &v)
 		cancel()
 		if err != nil {
@@ -38,8 +38,8 @@ func RestoreMetrics(m common.Repository, op *Options) error {
 	return nil
 }
 
-func SaveMetrics(m common.Repository, op *Options) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func SaveMetrics(ctx context.Context, m common.Repository, op *Options) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	metrics, err := m.GetMetrics(ctx)
 	if err != nil {
@@ -53,7 +53,7 @@ func SaveMetrics(m common.Repository, op *Options) error {
 	return os.WriteFile(op.StoragePath, data, 0666)
 }
 
-func SaveMetricsInterval(m common.Repository, op *Options, wg *sync.WaitGroup) {
+func SaveMetricsInterval(ctx context.Context, m common.Repository, op *Options, wg *sync.WaitGroup) {
 	defer wg.Done()
 	if err := ValidateBeforeSave(op); err != nil {
 		common.SugaredLogger().Errorf("Unable to save metrics: %v", err)
@@ -61,7 +61,7 @@ func SaveMetricsInterval(m common.Repository, op *Options, wg *sync.WaitGroup) {
 	}
 	for {
 		time.Sleep(time.Duration(op.StorageInterval) * time.Second)
-		err := SaveMetrics(m, op)
+		err := SaveMetrics(ctx, m, op)
 		if err != nil {
 			common.SugaredLogger().Errorf("Error saving metrics: %v", err)
 		}

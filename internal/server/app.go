@@ -6,9 +6,9 @@ import (
 )
 
 type App struct {
-	strg            common.Repository
-	options         *config.Options
-	syncFileStorage bool
+	Strg            common.Repository
+	Options         *config.Options
+	SyncFileStorage bool
 }
 
 func NewApp(strg common.Repository, op *config.Options) *App {
@@ -18,5 +18,5 @@ func NewApp(strg common.Repository, op *config.Options) *App {
 	}
 	syncFS := (op.Storage.Interval == 0 && op.Storage.Path != "")
 
-	return &App{strg: strg, options: op, syncFileStorage: syncFS}
+	return &App{Strg: strg, Options: op, SyncFileStorage: syncFS}
 }
