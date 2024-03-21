@@ -27,8 +27,8 @@ func RestoreMetrics(ctx context.Context, m common.Repository, op *Options) error
 		return err
 	}
 	for _, v := range metrics {
-		ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
-		err := m.AddMetric(ctx, &v)
+		addMetricCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
+		err := m.AddMetric(addMetricCtx, &v)
 		cancel()
 		if err != nil {
 			return err
@@ -50,7 +50,7 @@ func SaveMetrics(ctx context.Context, m common.Repository, op *Options) error {
 		return err
 	}
 
-	return os.WriteFile(op.StoragePath, data, 0666)
+	return os.WriteFile(op.StoragePath, data, 0o666)
 }
 
 func SaveMetricsInterval(ctx context.Context, m common.Repository, op *Options, wg *sync.WaitGroup) {

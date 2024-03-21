@@ -16,7 +16,6 @@ import (
 )
 
 func TestUpdateHandler(t *testing.T) {
-
 	type reqParams struct {
 		mType  string
 		mName  string
@@ -102,12 +101,6 @@ func TestUpdateHandler(t *testing.T) {
 }
 
 func TestUpdateJSONHandler(t *testing.T) {
-
-	type reqParams struct {
-		mType  string
-		mName  string
-		mvalue string
-	}
 	tests := []struct {
 		name     string
 		bodyJSON string

@@ -23,7 +23,7 @@ func UpdatesHandler(app *server.App) func(w http.ResponseWriter, r *http.Request
 			http.Error(w, "Error reading body", http.StatusInternalServerError)
 			return
 		}
-		if err := json.Unmarshal(buf.Bytes(), &data); err != nil {
+		if err = json.Unmarshal(buf.Bytes(), &data); err != nil {
 			http.Error(w, "Error parsing body", http.StatusBadRequest)
 			return
 		}

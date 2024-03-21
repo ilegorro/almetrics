@@ -78,7 +78,10 @@ func GetValueHandler(app *server.App) func(w http.ResponseWriter, r *http.Reques
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(v.StringValue()))
+		_, err = w.Write([]byte(v.StringValue()))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error getting metric: %v", err), http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -93,7 +96,7 @@ func GetValueJSONHandler(app *server.App) func(w http.ResponseWriter, r *http.Re
 			http.Error(w, "Error reading body", http.StatusInternalServerError)
 			return
 		}
-		if err := json.Unmarshal(buf.Bytes(), &data); err != nil {
+		if err = json.Unmarshal(buf.Bytes(), &data); err != nil {
 			http.Error(w, "Error parsing body", http.StatusInternalServerError)
 			return
 		}
@@ -120,6 +123,9 @@ func GetValueJSONHandler(app *server.App) func(w http.ResponseWriter, r *http.Re
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(respJSON))
+		_, err = w.Write([]byte(respJSON))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error getting metric: %v", err), http.StatusInternalServerError)
+		}
 	}
 }

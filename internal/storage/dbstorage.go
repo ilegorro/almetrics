@@ -21,6 +21,7 @@ func (s *DBStorage) AddMetric(ctx context.Context, data *common.Metrics) error {
 	var dbDelta sql.NullInt64
 	var value *float64
 	var delta *int64
+	var insertMode bool
 
 	switch data.MType {
 	case common.MetricGauge:
@@ -29,33 +30,50 @@ func (s *DBStorage) AddMetric(ctx context.Context, data *common.Metrics) error {
 		delta = data.Delta
 	}
 
-	err := s.pool.QueryRow(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() {
+		if terr := tx.Rollback(ctx); terr != nil {
+			err = fmt.Errorf("rollback transaction: %w", terr)
+		}
+	}()
+
+	err = tx.QueryRow(ctx, `
 		SELECT m_delta FROM metrics
 		WHERE m_id = $1 AND m_type = $2;
 	`, data.ID, data.MType).Scan(&dbDelta)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		err = common.WithRetryExec(s.pool.Exec, ctx, `
+		err = common.WithRetryExec(tx.Exec, ctx, `
 			INSERT INTO metrics(m_id, m_type, m_value, m_delta)
 			VALUES ($1, $2, $3, $4);
 		`, data.ID, data.MType, value, delta)
+		insertMode = true
 	}
 	if err != nil {
-		return fmt.Errorf("get insert metric: %w", err)
+		return fmt.Errorf("get insert metric (id:%v, type:%v): %w", data.ID, data.MType, err)
 	}
 
-	if dbDelta.Valid {
-		*delta += dbDelta.Int64
-	}
-
-	err = common.WithRetryExec(s.pool.Exec, ctx, `
+	if !insertMode {
+		if dbDelta.Valid {
+			*delta += dbDelta.Int64
+		}
+		err = common.WithRetryExec(tx.Exec, ctx, `
 		UPDATE metrics SET
 			m_value = $3,
 			m_delta = $4
 		WHERE m_id = $1 AND m_type = $2;
 	`, data.ID, data.MType, value, delta)
+		if err != nil {
+			return fmt.Errorf("update metric: %w", err)
+		}
+	}
+
+	err = tx.Commit(ctx)
 	if err != nil {
-		return fmt.Errorf("update metric: %w", err)
+		err = fmt.Errorf("add metric: %w", err)
 	}
 
 	return nil
@@ -70,7 +88,7 @@ func (s *DBStorage) AddMetrics(ctx context.Context, data []common.Metrics) error
 	existCounters := make(map[string]int64, 0)
 	for _, v := range metrics {
 		h := sha256.New()
-		h.Write([]byte(fmt.Sprintf("%v, %v", v.ID, v.MType)))
+		fmt.Fprintf(h, "%v, %v", v.ID, v.MType)
 		exist = append(exist, string(h.Sum(nil)))
 		if v.MType == common.MetricCounter {
 			existCounters[v.ID] = *v.Delta
@@ -81,14 +99,18 @@ func (s *DBStorage) AddMetrics(ctx context.Context, data []common.Metrics) error
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if terr := tx.Rollback(ctx); terr != nil {
+			err = fmt.Errorf("rollback transaction: %w", terr)
+		}
+	}()
 
 	for _, v := range data {
 		var value *float64
 		var delta *int64
 
 		h := sha256.New()
-		h.Write([]byte(fmt.Sprintf("%v, %v", v.ID, v.MType)))
+		fmt.Fprintf(h, "%v, %v", v.ID, v.MType)
 
 		switch v.MType {
 		case common.MetricGauge:
@@ -123,13 +145,16 @@ func (s *DBStorage) AddMetrics(ctx context.Context, data []common.Metrics) error
 				return fmt.Errorf("insert metric: %w", err)
 			}
 			h := sha256.New()
-			h.Write([]byte(fmt.Sprintf("%v, %v", v.ID, v.MType)))
+			fmt.Fprintf(h, "%v, %v", v.ID, v.MType)
 			exist = append(exist, string(h.Sum(nil)))
 		}
 	}
-	tx.Commit(ctx)
+	err = tx.Commit(ctx)
+	if err != nil {
+		err = fmt.Errorf("add metric: %w", err)
+	}
 
-	return nil
+	return err
 }
 
 func (s *DBStorage) GetMetric(ctx context.Context, ID, MType string) (*common.Metrics, error) {
@@ -142,11 +167,11 @@ func (s *DBStorage) GetMetric(ctx context.Context, ID, MType string) (*common.Me
 	var value sql.NullFloat64
 	var delta sql.NullInt64
 	if MType != common.MetricCounter && MType != common.MetricGauge {
-		return nil, fmt.Errorf("get metric: %w", common.ErrWrongMetricsType)
+		return nil, fmt.Errorf("get metric type %v: %w", MType, common.ErrWrongMetricsType)
 	}
 	err := row.Scan(&res.ID, &res.MType, &value, &delta)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("get metric: %w", common.ErrWrongMetricsID)
+		return nil, fmt.Errorf("get metric id %v: %w", ID, common.ErrWrongMetricsID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get metric: %w", err)
@@ -199,12 +224,11 @@ func NewDBStorage(ctx context.Context, pool *pgxpool.Pool) (*DBStorage, error) {
 	s := &DBStorage{pool: pool}
 	_, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS metrics (
 		id serial PRIMARY KEY,
-		m_id VARCHAR(255) UNIQUE NOT NULL,
+		m_id VARCHAR(255) NOT NULL,
 		m_type VARCHAR(255) NOT NULL,
 		m_value FLOAT8,
 		m_delta INT8
 	);`)
-
 	if err != nil {
 		return nil, fmt.Errorf("init db storage: %w", err)
 	}
