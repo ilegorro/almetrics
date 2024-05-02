@@ -187,8 +187,8 @@ func reportWorker(ctx context.Context, app *App, jobs <-chan common.Metrics) err
 				return fmt.Errorf("close gzip: %w", err)
 			}
 
-			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			r, err := http.NewRequestWithContext(ctx, http.MethodPost, app.Options.Endpoint.URL(), buf)
+			rCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			r, err := http.NewRequestWithContext(rCtx, http.MethodPost, app.Options.Endpoint.URL(), buf)
 			if err != nil {
 				cancel()
 				return fmt.Errorf("create request: %w", err)

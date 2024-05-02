@@ -11,8 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-type funcExec func(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-type funcDo func(req *http.Request) (*http.Response, error)
+type (
+	funcExec func(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	funcDo   func(req *http.Request) (*http.Response, error)
+)
 
 func WithRetryDo(aFunc funcDo, req *http.Request) (*http.Response, error) {
 	var err error
@@ -36,7 +38,7 @@ func WithRetryExec(aFunc funcExec, ctx context.Context, sql string, args ...any)
 	attempts := 0
 	for {
 		_, err = aFunc(ctx, sql, args...)
-		if attempts == 3 || !(errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code)) {
+		if attempts == 3 || errors.As(err, &pgErr) && !pgerrcode.IsConnectionException(pgErr.Code) {
 			break
 		}
 		attempts += 1

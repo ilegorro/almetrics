@@ -47,6 +47,7 @@ func UpdateHandler(app *server.App) func(w http.ResponseWriter, r *http.Request)
 		err := app.Strg.AddMetric(ctx, &metrics)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -71,7 +72,7 @@ func UpdateJSONHandler(app *server.App) func(w http.ResponseWriter, r *http.Requ
 			http.Error(w, "Error reading body", http.StatusInternalServerError)
 			return
 		}
-		if err := json.Unmarshal(buf.Bytes(), &data); err != nil {
+		if err = json.Unmarshal(buf.Bytes(), &data); err != nil {
 			http.Error(w, "Error parsing body", http.StatusBadRequest)
 			return
 		}
@@ -81,6 +82,7 @@ func UpdateJSONHandler(app *server.App) func(w http.ResponseWriter, r *http.Requ
 		cancel()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		ctx, cancel = context.WithTimeout(r.Context(), 10*time.Second)
@@ -106,7 +108,11 @@ func UpdateJSONHandler(app *server.App) func(w http.ResponseWriter, r *http.Requ
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(respJSON))
+		_, err = w.Write([]byte(respJSON))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error getting metric: %v", err), http.StatusInternalServerError)
+			return
+		}
 		if app.SyncFileStorage {
 			sop := filestorage.Options{StoragePath: app.Options.Storage.Path}
 			err := filestorage.SaveMetrics(r.Context(), app.Strg, &sop)

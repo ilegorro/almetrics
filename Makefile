@@ -15,4 +15,5 @@ test-local:
 	-file-storage-path="/tmp/metrics-db.json" \
 	-database-dsn=postgres://postgres:almetrics@localhost:5432/metrics \
 	-key=almetrics
-	rm $(agent-bin) $(server-bin)
+
+#rm $(agent-bin) $(server-bin)
